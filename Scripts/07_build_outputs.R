@@ -1,0 +1,542 @@
+# 07_build_outputs.R
+# Individual-level and contextual SP 2014-2024 base, built from pre-consolidated sources.
+# Source: Bancos/pre-consolidados/
+# Outputs: resultados/SIH/, resultados/SINAN/, resultados/contextual/
+#
+# To add new data sources, append a new section at the end of this script.
+
+library(arrow)
+library(dplyr)
+library(readxl)
+library(tidyr)
+
+# ICD codes for exogenous intoxication (same criteria as original download scripts)
+IEXO_ICD_CODES <- c(
+  paste0("T", 36:65),
+  paste0("X", 40:49),
+  paste0("X", 60:69),
+  paste0("Y", 10:19)
+)
+
+# SIH columns kept for epidemiological analysis (selected from 121 original columns)
+SIH_COLUMNS_KEEP <- c(
+  "N_AIH",
+  "ANO_CMPT", "MES_CMPT", "DT_INTER", "DT_SAIDA",
+  "MUNIC_RES", "MUNIC_MOV", "CNES",
+  "NASC", "COD_IDADE", "IDADE",
+  "SEXO", "RACA_COR", "ETNIA",
+  "INSTRU", "CBOR", "VINCPREV",        # mostly empty in this file, retained for completeness
+  "DIAG_PRINC", "DIAG_SECUN", "CID_ASSO", "CID_MORTE", "CID_NOTIF",
+  "MORTE", "DIAS_PERM", "QT_DIARIAS",
+  "MARCA_UTI", "MARCA_UCI", "CAR_INT", "COMPLEX",
+  "VAL_TOT"
+)
+
+# SINAN columns to drop (batch numbers, system transfer timestamps, redundant fields)
+SINAN_COLUMNS_DROP <- c(
+  "TP_NOT",
+  "SEM_PRI",
+  "ID_REGIONA", "ID_RG_RESI",
+  "ID_PAIS", "PAIS_EXP",
+  "CAT",
+  "DT_DIGITA", "DT_TRANSUS", "DT_TRANSDM", "DT_TRANSSM",
+  "DT_TRANSRM", "DT_TRANSRS", "DT_TRANSSE",
+  "NU_LOTE_V", "NU_LOTE_H", "NU_LOTE_I"
+)
+
+# ===========================================================================
+# SECTION 1: SIH
+# Source: Bancos/pre-consolidados/SIH/SIH_10_anos_IEXO_SP.parquet
+# Filter: exogenous intoxication ICD + SP residence (MUNIC_RES starts with "35")
+# Output: resultados/SIH/sih_iexo_sp_2014_2024.parquet
+# ===========================================================================
+
+cat("=== SIH ===\n")
+cat("Reading...\n")
+
+sih_raw <- read_parquet("Bancos/pre-consolidados/SIH/SIH_10_anos_IEXO_SP.parquet")
+
+cat("Raw:", nrow(sih_raw), "rows\n")
+
+sih_out <- sih_raw |>
+  filter(
+    substr(DIAG_PRINC, 1, 3) %in% IEXO_ICD_CODES,
+    substr(MUNIC_RES, 1, 2) == "35"
+  ) |>
+  select(all_of(SIH_COLUMNS_KEEP))
+
+cat("Filtered (IEXO + SP residence):", nrow(sih_out), "rows\n")
+cat("Period:", paste(sort(unique(sih_out$ANO_CMPT)), collapse = " "), "\n")
+
+write_parquet(sih_out, "resultados/SIH/sih_iexo_sp_2014_2024.parquet",
+              compression = "zstd")
+
+cat("Saved: resultados/SIH/sih_iexo_sp_2014_2024.parquet\n\n")
+
+rm(sih_raw, sih_out)
+gc()
+
+# ===========================================================================
+# SECTION 2: SINAN
+# Source: Bancos/pre-consolidados/SINAN/SINAN_10_IEXO_SP.parquet
+# Already filtered for SP residence (SG_UF = "35") and IEXO at source.
+# Output: resultados/SINAN/sinan_iexo_sp_2014_2024.parquet
+# ===========================================================================
+
+cat("=== SINAN ===\n")
+cat("Reading...\n")
+
+sinan_raw <- read_parquet("Bancos/pre-consolidados/SINAN/SINAN_10_IEXO_SP.parquet")
+
+cat("Raw:", nrow(sinan_raw), "rows\n")
+
+sinan_out <- sinan_raw |>
+  select(-any_of(SINAN_COLUMNS_DROP))
+
+cat("Columns kept:", ncol(sinan_out), "of", ncol(sinan_raw), "\n")
+cat("Period:", paste(sort(unique(sinan_out$ano_origem)), collapse = " "), "\n")
+
+write_parquet(sinan_out, "resultados/SINAN/sinan_iexo_sp_2014_2024.parquet",
+              compression = "zstd")
+
+cat("Saved: resultados/SINAN/sinan_iexo_sp_2014_2024.parquet\n\n")
+
+rm(sinan_raw, sinan_out)
+gc()
+
+if (!dir.exists("resultados/contextual")) dir.create("resultados/contextual", recursive = TRUE)
+
+# ===========================================================================
+# SECTION 3: IVS — Social Vulnerability Index (IPEA / Atlas do Des. Humano)
+# Source: Bancos/pre-consolidados/IVS e IPVS/IVS/atlas-ivs_dadosbrutos_SP.xlsx
+# Municipal level, SP, Census 2010. Used as fixed contextual covariate.
+# Output: resultados/contextual/ivs_municipios_sp_2010.parquet
+# ===========================================================================
+
+cat("=== IVS ===\n")
+cat("Reading...\n")
+
+# Variables of interest selected by the research team
+IVS_VARS <- c(
+  "municipio_6digt", "nome_municipio_uf",
+  "populacao",
+  "ivs", "ivs_infraestrutura_urbana", "ivs_capital_humano", "ivs_renda_e_trabalho",
+  "t_sem_agua_esgoto", "t_sem_lixo", "t_densidadem2", "t_eletrica",
+  "t_vulner", "renda_per_capita", "rdpc_def_vulner", "i_gini",
+  "t_mchef_fundin_fmenor", "t_analf_15m", "t_cdom_fundin",
+  "t_mort1", "t_fmor5", "espvida",
+  "t_atividade10a14", "pea10a14",
+  "t_razdep", "t_fectot",
+  "label_sit_dom"
+)
+
+ivs_raw <- read_excel("Bancos/pre-consolidados/IVS e IPVS/IVS/atlas-ivs_dadosbrutos_SP.xlsx")
+
+ivs_out <- ivs_raw |>
+  filter(
+    nivel == "regiao,uf,rm,municipio",
+    uf    == "35",
+    ano   == "2010"
+  ) |>
+  select(any_of(IVS_VARS)) |>
+  rename(cod_ibge = municipio_6digt)
+
+cat("Municipalities:", nrow(ivs_out), "\n")
+
+write_parquet(ivs_out, "resultados/contextual/ivs_municipios_sp_2010.parquet",
+              compression = "zstd")
+
+cat("Saved: resultados/contextual/ivs_municipios_sp_2010.parquet\n\n")
+
+rm(ivs_raw, ivs_out)
+gc()
+
+# ===========================================================================
+# SECTION 4: IBP — Brazilian Index of Deprivation (CIDACS / Fiocruz)
+# Source: Bancos/pre-consolidados/IBP/ibp_setor_censitario.csv
+# Census-tract level → aggregated to municipality by population-weighted mean.
+# Filter: Sao Paulo state only.
+# Output: resultados/contextual/ibp_municipios_sp.parquet
+# ===========================================================================
+
+cat("=== IBP ===\n")
+cat("Reading...\n")
+
+ibp_raw <- read.csv("Bancos/pre-consolidados/IBP/ibp_setor_censitario.csv")
+
+ibp_out <- ibp_raw |>
+  filter(Nome_da_UF == "São Paulo", !is.na(BrazDep_measure)) |>
+  group_by(cod_ibge = as.character(Cod_municipio), Nome_do_municipio) |>
+  summarise(
+    ibp_n_setores          = n(),
+    ibp_deprivation_mean   = weighted.mean(BrazDep_measure, w = n_pop_hh, na.rm = TRUE),
+    ibp_deprivation_median = median(BrazDep_measure, na.rm = TRUE),
+    ibp_pct_urban          = mean(urban, na.rm = TRUE) * 100,
+    .groups = "drop"
+  )
+
+cat("Municipalities:", nrow(ibp_out), "\n")
+
+write_parquet(ibp_out, "resultados/contextual/ibp_municipios_sp.parquet",
+              compression = "zstd")
+
+cat("Saved: resultados/contextual/ibp_municipios_sp.parquet\n\n")
+
+rm(ibp_raw, ibp_out)
+gc()
+
+# ===========================================================================
+# SECTION 5: IPVS — Paulista Index of Social Vulnerability (SEADE-SP)
+# Source: Bancos/pre-consolidados/IVS e IPVS/IPVS/tratado/ipvs_tidy.csv
+# Municipality level (setor == "Total"), SP only (all records are SP).
+# Output: resultados/contextual/ipvs_municipios_sp.parquet
+#
+# IPVS vulnerability groups:
+#   1 - Baixissima Vulnerabilidade (very low)
+#   2 - Muito Baixa Vulnerabilidade (low)
+#   3 - Baixa Vulnerabilidade
+#   4 - Media Vulnerabilidade
+#   5 - Alta Vulnerabilidade (high)
+#   6 - Muito Alta Vulnerabilidade (very high)
+# ===========================================================================
+
+cat("=== IPVS ===\n")
+cat("Reading and parsing...\n")
+
+ipvs_raw <- read.csv(
+  "Bancos/pre-consolidados/IVS e IPVS/IPVS/tratado/ipvs_tidy.csv",
+  header = TRUE, stringsAsFactors = FALSE
+)
+
+# CSV has a single column with semicolon-separated fields
+ipvs_parsed <- as.data.frame(
+  do.call(rbind, strsplit(ipvs_raw[[1]], ";")),
+  stringsAsFactors = FALSE
+)
+names(ipvs_parsed) <- c("tema", "unidade", "municipio_codigo", "municipio_nome",
+                        "variavel", "setor", "ipvs_grupo", "valor")
+
+ipvs_parsed$valor <- suppressWarnings(as.numeric(ipvs_parsed$valor))
+
+# Keep municipality-level totals only (setor == "Total")
+# Use domicilios as the unit for group distribution
+ipvs_mun <- ipvs_parsed |>
+  filter(
+    setor    == "Total",
+    unidade  == "domicilios",
+    !is.na(valor)
+  ) |>
+  mutate(
+    cod_ibge    = substr(municipio_codigo, 1, 6),
+    ipvs_grupo  = trimws(ipvs_grupo)
+  )
+
+# Total domiciles per municipality
+ipvs_total <- ipvs_mun |>
+  filter(ipvs_grupo == "Total") |>
+  group_by(cod_ibge, municipio_nome, variavel) |>
+  summarise(total_domicilios = sum(valor, na.rm = TRUE), .groups = "drop")
+
+# Distribution across vulnerability groups (proportion of domiciles)
+ipvs_groups <- ipvs_mun |>
+  filter(ipvs_grupo != "Total") |>
+  group_by(cod_ibge, variavel, ipvs_grupo) |>
+  summarise(n = sum(valor, na.rm = TRUE), .groups = "drop") |>
+  left_join(
+    ipvs_total |> select(cod_ibge, variavel, total_domicilios),
+    by = c("cod_ibge", "variavel")
+  ) |>
+  mutate(
+    pct = round(n / total_domicilios * 100, 2),
+    grupo_label = paste0("ipvs_pct_grupo", substr(ipvs_grupo, 1, 1))
+  ) |>
+  group_by(cod_ibge, grupo_label) |>
+  summarise(pct = mean(pct, na.rm = TRUE), .groups = "drop") |>
+  pivot_wider(names_from = grupo_label, values_from = pct)
+
+# Municipality names
+mun_names <- ipvs_total |>
+  select(cod_ibge, municipio_nome) |>
+  distinct()
+
+ipvs_out <- mun_names |>
+  left_join(ipvs_groups, by = "cod_ibge")
+
+cat("Municipalities:", nrow(ipvs_out), "\n")
+cat("Columns:", paste(names(ipvs_out), collapse = ", "), "\n")
+
+write_parquet(ipvs_out, "resultados/contextual/ipvs_municipios_sp.parquet",
+              compression = "zstd")
+
+cat("Saved: resultados/contextual/ipvs_municipios_sp.parquet\n\n")
+
+rm(ipvs_raw, ipvs_parsed, ipvs_mun, ipvs_total, ipvs_groups, ipvs_out)
+gc()
+
+# ===========================================================================
+# SECTION 6: SISAGUA — Pesticides in drinking water (MS / DATASUS)
+# Source: Bancos/pre-consolidados/SISAGUA/sisagua_agro_2014-2024.parquet
+# Filter: SP state only (SG_UF == "SP"). CO_MUNICIPIO_IBGE is already 6 digits.
+# Output: resultados/SISAGUA/sisagua_sp_2014_2024.parquet
+#
+# TIPO_RESULTADO values:
+#   NUMERICO  — quantifiable detection (value in RESULTADO_NUM)
+#   MENOR_LQ  — detected but below quantification limit
+#   MENOR_LD  — not detected (below detection limit)
+# ===========================================================================
+
+cat("=== SISAGUA ===\n")
+cat("Reading...\n")
+
+if (!dir.exists("resultados/SISAGUA")) dir.create("resultados/SISAGUA", recursive = TRUE)
+
+SISAGUA_COLUMNS_KEEP <- c(
+  "CO_MUNICIPIO_IBGE", "NO_MUNICIPIO",
+  "NU_ANO", "NU_SEMESTRE", "TP_TRIMESTRE", "DT_COLETA",
+  "PARAMETRO_FINAL", "TIPO_RESULTADO", "RESULTADO", "RESULTADO_NUM",
+  "VMP", "UNIDADE", "LD", "LQ",
+  "TP_ABASTECIMENTO", "TP_CAPTACAO", "CAT_CAPTACAO_FINAL",
+  "NO_SOLUCAO_ABASTECIMENTO"
+)
+
+sisagua_raw <- read_parquet("Bancos/pre-consolidados/SISAGUA/sisagua_agro_2014-2024.parquet")
+
+cat("Raw (Brazil):", nrow(sisagua_raw), "rows\n")
+
+sisagua_out <- sisagua_raw |>
+  filter(SG_UF == "SP") |>
+  select(all_of(SISAGUA_COLUMNS_KEEP)) |>
+  rename(cod_ibge = CO_MUNICIPIO_IBGE)
+
+cat("Filtered (SP):", nrow(sisagua_out), "rows\n")
+cat("Period:", paste(sort(unique(sisagua_out$NU_ANO)), collapse = " "), "\n")
+cat("Pesticides:", n_distinct(sisagua_out$PARAMETRO_FINAL), "\n")
+
+write_parquet(sisagua_out, "resultados/SISAGUA/sisagua_sp_2014_2024.parquet",
+              compression = "zstd")
+
+cat("Saved: resultados/SISAGUA/sisagua_sp_2014_2024.parquet\n\n")
+
+rm(sisagua_raw, sisagua_out)
+gc()
+
+# ===========================================================================
+# SECTION 7: PROD_AGRO — Agricultural production and pesticide use (IBGE)
+# Sources processed by: Scripts/06_process_prod_agro.R
+# Run that script first; this section validates outputs and prints summaries.
+#
+# Outputs expected in resultados/PROD_AGRO/:
+#   pam_municipio_produto_ano.parquet      — PAM 2014-2024, municipality × crop × year
+#   censo_agro_lavoura_2017.parquet        — Censo Agro 2017, crop-level production (T6957)
+#   censo_agro_municipio_2017.parquet      — Censo Agro 2017, pesticide use + spending (T6851+T6899)
+#   censo_agro_agrotox_orientacao_2017.parquet — Censo Agro 2017, pesticide use × guidance source (T6852)
+#   censo_agro_manejo_solo_2017.parquet    — Censo Agro 2017, soil management × farming typology (T6855)
+#   censo_agro_praticas_plantio_2017.parquet  — Censo Agro 2017, planting practices (T6845)
+# ===========================================================================
+
+cat("=== PROD_AGRO ===\n")
+
+prod_agro_files <- c(
+  "pam_municipio_produto_ano"           = "resultados/PROD_AGRO/pam_municipio_produto_ano.parquet",
+  "censo_agro_lavoura_2017"             = "resultados/PROD_AGRO/censo_agro_lavoura_2017.parquet",
+  "censo_agro_municipio_2017"           = "resultados/PROD_AGRO/censo_agro_municipio_2017.parquet",
+  "censo_agro_agrotox_orientacao_2017"  = "resultados/PROD_AGRO/censo_agro_agrotox_orientacao_2017.parquet",
+  "censo_agro_manejo_solo_2017"         = "resultados/PROD_AGRO/censo_agro_manejo_solo_2017.parquet",
+  "censo_agro_praticas_plantio_2017"    = "resultados/PROD_AGRO/censo_agro_praticas_plantio_2017.parquet"
+)
+
+for (name in names(prod_agro_files)) {
+  path <- prod_agro_files[name]
+  if (file.exists(path)) {
+    ds <- open_dataset(path)
+    cat(sprintf("  OK  %-45s %s rows\n", name, format(nrow(collect(ds)), big.mark = ",")))
+  } else {
+    cat(sprintf("  MISSING  %s\n  -> Run Scripts/06_process_prod_agro.R first\n", path))
+  }
+}
+
+cat("\n")
+
+# ===========================================================================
+# SECTION 8: SIM — Mortality Information System (DATASUS)
+# Source processed by: Scripts/03_download_sim.R
+# Run that script first to download and assemble the parquet.
+#
+# Output expected: resultados/SIM/sim_iexo_sp_2014_2024.parquet
+#   One row per death from exogenous intoxication, SP resident, 2014-2024.
+#   Key fields: DTOBITO, CAUSABAS, CODMUNRES, IDADEanos, SEXO_PADRONIZADO,
+#               RACACOR, ESC2010, OCUP, ACIDTRAB, CIRCOBITO
+# ===========================================================================
+
+cat("=== SIM ===\n")
+
+sim_path <- "resultados/SIM/sim_iexo_sp_2014_2024.parquet"
+
+if (file.exists(sim_path)) {
+  sim_check <- read_parquet(sim_path)
+  cat("Records:", format(nrow(sim_check), big.mark = ","), "\n")
+  cat("Columns:", ncol(sim_check), "\n")
+  if ("DTOBITO" %in% names(sim_check)) {
+    cat("Period:\n")
+    print(table(substr(as.character(sim_check$DTOBITO), 1, 4)))
+  }
+  rm(sim_check)
+} else {
+  cat("MISSING:", sim_path, "\n")
+  cat("-> Run Scripts/03_download_sim.R first\n")
+}
+
+cat("\n")
+
+# ===========================================================================
+# SECTION 9: CAGED — Formal agricultural employment (MTE / PDET)
+# Source processed by: Scripts/CAGED automatizado.R
+# Run that script first to download all monthly parquets (may take several hours).
+#
+# Filter: SP state only (uf == "35")
+#         Agricultural CNAE division (subclasse starts with "01")
+# Aggregation: municipality × year → admissions, dismissals, net balance
+# Output: resultados/contextual/caged_agro_sp_municipio_ano.parquet
+#
+# Notes:
+#   - Old CAGED (≤2019): "Admitidos/Desligados" harmonised to saldomovimentação (+1/-1)
+#   - New CAGED (≥2020): saldomovimentação already in standardised format
+#   - Municipality codes: old CAGED may use 6 digits, new uses 7 (IBGE check digit appended).
+#     substr(..., 1, 6) handles both correctly.
+# ===========================================================================
+
+cat("=== CAGED ===\n")
+
+caged_dir <- "resultados/CAGED"
+
+if (!dir.exists(caged_dir)) {
+  cat("Directory not found:", caged_dir, "\n")
+  cat("-> Run Scripts/CAGED automatizado.R first\n\n")
+} else {
+  caged_files <- list.files(caged_dir, pattern = "\\.parquet$", full.names = FALSE)
+  n_caged <- length(caged_files)
+
+  if (n_caged == 0) {
+    cat("No monthly CAGED parquets found in", caged_dir, "\n")
+    cat("-> Run Scripts/CAGED automatizado.R first\n\n")
+  } else {
+    cat("Monthly parquets found:", n_caged, "(expected 132 for full 2014-2024 coverage)\n")
+    cat("Aggregating to municipality x year...\n")
+
+    # Monthly parquets already contain SP agriculture records only
+    # (filtered during download by CAGED automatizado.R)
+    caged_agro <- open_dataset(caged_dir, format = "parquet") |>
+      collect() |>
+      mutate(
+        cod_ibge     = substr(`município`, 1, 6),
+        admissao     = as.integer(`saldomovimentação` == 1L),
+        desligamento = as.integer(`saldomovimentação` == -1L)
+      ) |>
+      group_by(cod_ibge, ano = ano_referencia) |>
+      summarise(
+        caged_admissoes_agro        = sum(admissao,            na.rm = TRUE),
+        caged_desligamentos_agro    = sum(desligamento,        na.rm = TRUE),
+        caged_saldo_liquido_agro    = sum(`saldomovimentação`, na.rm = TRUE),
+        caged_movimentos_total_agro = n(),
+        .groups = "drop"
+      )
+
+    cat("Municipalities x years:", nrow(caged_agro), "\n")
+    cat("Period:", paste(sort(unique(caged_agro$ano)), collapse = " "), "\n")
+
+    write_parquet(caged_agro, "resultados/contextual/caged_agro_sp_municipio_ano.parquet",
+                  compression = "zstd")
+
+    cat("Saved: resultados/contextual/caged_agro_sp_municipio_ano.parquet\n\n")
+
+    rm(caged_agro)
+    gc()
+  }
+}
+
+# ===========================================================================
+# SECTION 10: Population estimates (IBGE / DATASUS POPSVS)
+# Source processed by: Scripts/download_estimativas.R
+# Run that script first; it downloads IBGE intercensal estimates for Brazil 2001-2025.
+#
+# Filter: São Paulo state only, years 2014-2024.
+# Output: resultados/contextual/populacao_sp_municipio_ano.parquet
+#   One row per municipality × year × sex × single-year age.
+#   Used to compute crude and age/sex-standardised incidence/mortality rates.
+# ===========================================================================
+
+cat("=== Population estimates ===\n")
+
+pop_path <- "Bancos/populacao_estimativas_idade_simples_2001_2025.parquet"
+
+if (!file.exists(pop_path)) {
+  cat("File not found:", pop_path, "\n")
+  cat("-> Run Scripts/download_estimativas.R first\n\n")
+} else {
+  cat("Reading...\n")
+
+  pop_out <- read_parquet(pop_path) |>
+    filter(UF == "São Paulo", ANO %in% 2014:2024) |>
+    mutate(cod_ibge = substr(as.character(CODMUN), 1, 6)) |>
+    rename(ano = ANO, sexo = SEXO, idade = IDADE, populacao = POPULACAO) |>
+    select(cod_ibge, ano, sexo, idade, populacao)
+
+  cat("Rows:", format(nrow(pop_out), big.mark = ","), "\n")
+  cat("Municipalities:", n_distinct(pop_out$cod_ibge), "\n")
+  cat("Period:", paste(sort(unique(pop_out$ano)), collapse = " "), "\n")
+
+  write_parquet(pop_out, "resultados/contextual/populacao_sp_municipio_ano.parquet",
+                compression = "zstd")
+
+  cat("Saved: resultados/contextual/populacao_sp_municipio_ano.parquet\n\n")
+
+  rm(pop_out)
+  gc()
+}
+
+# ===========================================================================
+# SECTION 11: Urban/Rural population split (IBGE Census 2022)
+# Source: Bancos/pre-consolidados/T9923-pop_rural_urb.xlsx
+# Single cross-section (2022). Used as fixed municipal covariate.
+# Output: resultados/contextual/pop_rural_urb_sp_2022.parquet
+# ===========================================================================
+
+cat("=== Urban/Rural population (Census 2022) ===\n")
+
+t9923_path <- "Bancos/pre-consolidados/T9923-pop_rural_urb.xlsx"
+
+t9923_raw <- read_excel(t9923_path, sheet = 1, skip = 3, col_names = FALSE)
+names(t9923_raw) <- c("nome_municipio", "pop_urb_2022", "pop_rur_2022")
+
+t9923 <- t9923_raw |>
+  filter(grepl("\\(SP\\)$", nome_municipio)) |>
+  mutate(
+    pop_urb_2022  = suppressWarnings(as.integer(pop_urb_2022)),
+    pop_rur_2022  = suppressWarnings(as.integer(pop_rur_2022)),
+    pct_rural_2022 = round(
+      coalesce(pop_rur_2022, 0L) / (pop_urb_2022 + coalesce(pop_rur_2022, 0L)) * 100,
+      2
+    )
+  )
+
+# cod_ibge via PAM (same name format: "Municipio (SP)")
+pam_nomes <- read_parquet("resultados/PROD_AGRO/pam_municipio_produto_ano.parquet") |>
+  filter(produto == "Total") |>
+  select(cod_ibge, nome_municipio) |>
+  distinct()
+
+t9923_out <- t9923 |>
+  left_join(pam_nomes, by = "nome_municipio") |>
+  filter(!is.na(cod_ibge)) |>
+  select(cod_ibge, pop_urb_2022, pop_rur_2022, pct_rural_2022)
+
+cat("Municipalities:", nrow(t9923_out), "\n")
+
+write_parquet(t9923_out, "resultados/contextual/pop_rural_urb_sp_2022.parquet",
+              compression = "zstd")
+
+cat("Saved: resultados/contextual/pop_rural_urb_sp_2022.parquet\n\n")
+
+rm(t9923_raw, t9923, t9923_out, pam_nomes)
+
+cat("=== Done ===\n")
