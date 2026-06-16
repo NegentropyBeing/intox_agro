@@ -23,7 +23,11 @@ in Part 7 of `08_build_consolidated_base.R`.
 
 ## Population (IBGE intercensal estimates)
 
-Source: `resultados/contextual/populacao_sp_municipio_ano.parquet`
+Source: aggregated from `resultados/contextual/populacao_sp_municipio_ano.parquet`
+
+> The source file is granular (one row per municipality × year × sex × single-year age,
+> column `populacao`). The variables below are computed by `08_build_consolidated_base.R`
+> and exist only in this consolidated base, not in the individual population file.
 
 | # | Variable | Type | Description |
 |---|---|---|---|
@@ -135,6 +139,10 @@ Single cross-section (Census 2010). Same value repeated across all years.
 
 > All IVS variables are stored as numeric in the parquet. The source Excel uses a comma
 > decimal separator, which is converted automatically during processing.
+>
+> Each value is the **overall municipal figure** — the "Total Cor × Total Sexo" cell of the
+> source's race × sex grid (see METHODS.md §5 for how it is selected). It is not specific to
+> any racial or sex subgroup.
 
 | # | Variable | Type | Description |
 |---|---|---|---|

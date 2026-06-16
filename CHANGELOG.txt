@@ -1,0 +1,66 @@
+CHANGELOG — Pesticides & Health Datalake (São Paulo, 2014–2024)
+FSP-USP x University of Michigan
+================================================================
+
+Newest version on top. Each entry lists what changed since the
+previous packaged version (dados_current-*.zip).
+
+
+----------------------------------------------------------------
+Version: 2026-06-15
+----------------------------------------------------------------
+
+Focus: IVS (Social Vulnerability Index) — clarified how the
+single municipal value is selected, and made the pipeline
+self-explanatory. No values in the consolidated base changed.
+
+DOCUMENTATION
+  - DATA_DICTIONARY.md (IVS section): corrected the description
+    of the file grain. The multiple rows per municipality are
+    demographic breakdowns by race (label_cor: Branco / Negro /
+    Total Cor) x sex (label_sexo: Homem / Mulher / Total Sexo),
+    each split by household situation (label_sit_dom) — NOT
+    sub-municipal weighting areas, as previously stated.
+  - METHODS.md (Section 5, IVS): added "Row structure and
+    municipal aggregation" explaining the race x sex grid, why
+    the overall value is the "Total Cor x Total Sexo" cell, and
+    a reproducibility note.
+  - DATA_DICTIONARY_BASE.md (IVS): added a note that each IVS
+    value is the overall "Total Cor x Total Sexo" municipal cell,
+    not a racial/sex subgroup.
+
+SCRIPTS
+  - 07_build_outputs.R: IVS_VARS now retains label_cor and
+    label_sexo, so the output parquet keeps the demographic
+    stratifiers.
+  - 08_build_consolidated_base.R: replaced the maximum-population
+    heuristic with an explicit filter
+        label_sit_dom == "Total Situação de Domicílio"
+        & label_cor  == "Total Cor"
+        & label_sexo == "Total Sexo"
+    plus a guard that aborts if more than one row per
+    municipality remains. Result is identical to the previous
+    approach (verified: 645/645 municipalities, 0 differences in
+    the ivs value).
+
+ACTION REQUIRED IF RE-RUNNING THE PIPELINE
+  - Run 07_build_outputs.R BEFORE 08_build_consolidated_base.R.
+    Script 08 now depends on the label_cor / label_sexo columns
+    added to the IVS parquet by script 07.
+
+OUTPUT IMPACT
+  - resultados/base_consolidada_sp_2014_2024.parquet is unchanged
+    (same 7,095 rows x 64 variables, same IVS values). Only the
+    selection logic and documentation were clarified.
+
+
+----------------------------------------------------------------
+Previous version: 2026-06-11
+----------------------------------------------------------------
+
+  - Added 5 race/colour composition variables (pct_branca,
+    pct_preta, pct_amarela, pct_parda, pct_indigena) from the
+    2022 Census (SIDRA T9606): 59 -> 64 variables in the
+    consolidated base.
+  - Switched the source of nome_municipio from geobr to the
+    SIDRA T9606 spreadsheet (removed the network dependency).

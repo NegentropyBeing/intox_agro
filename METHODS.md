@@ -149,6 +149,29 @@ five thematic domains:
 - **Child labor:** economic activity rate 10–14 years.
 - **Urban/rural stratification:** `label_sit_dom` (urban vs. rural disaggregation).
 
+### Row structure and municipal aggregation
+
+After the `nivel`/`uf`/`ano` filters above, the output still contains **multiple rows per
+municipality**. These are *demographic* breakdowns, not geographic ones: the source crosses
+race (`label_cor`: Branco / Negro / Total Cor) by sex (`label_sexo`: Homem / Mulher / Total
+Sexo) — a 3 × 3 grid — and each cell is additionally split by household situation
+(`label_sit_dom`: Total / Urbano / Rural). Sub-municipal weighting areas (UDH) are **not**
+included; they live under a different `nivel` value (`regiao,uf,rm,municipio,udh`) that is
+excluded by the municipal-level filter.
+
+The overall municipal value is the **Total Cor × Total Sexo × Total Situação de Domicílio**
+cell. Because `label_cor` and `label_sexo` were not carried into the output parquet, that
+cell is recovered indirectly in `08_build_consolidated_base.R`: filter
+`label_sit_dom == "Total Situação de Domicílio"`, then take the **maximum-population** row per
+municipality. The all-race/all-sex total has, by construction, a larger population than any
+subgroup, so the maximum reliably lands on the totals cell. This was verified to select the
+"Total Cor / Total Sexo" row for all 645 municipalities, with no exceptions.
+
+> **Reproducibility note:** retaining `label_cor` and `label_sexo` in the output would let
+> downstream code select the totals cell explicitly (`label_cor == "Total Cor" &
+> label_sexo == "Total Sexo"`) rather than via the population heuristic. The two approaches
+> give identical results today; the explicit filter is recommended if the pipeline is re-run.
+
 ### Known limitations
 
 IVS is only available for Census years (2000 and 2010). For a study period of 2014–2024,

@@ -29,7 +29,11 @@ All sources below are joined here. Variable groups can be included or excluded v
 | `nome_municipio` | string | geobr | Municipality name (IBGE canonical, e.g. `"Campinas"`) |
 | `ano` | integer | — | Calendar year (2014–2024) |
 
-### Population (from `populacao_sp_municipio_ano.parquet`)
+### Population (aggregated from `populacao_sp_municipio_ano.parquet`)
+
+> These variables do **not** exist as columns in the individual population file. They are
+> computed in `08_build_consolidated_base.R` by aggregating the granular file
+> (one row per municipality × year × sex × single-year age) into municipality × year totals.
 
 | Variable | Type | Description |
 |---|---|---|
@@ -416,7 +420,7 @@ caged <- open_dataset("./resultados/CAGED/") |> collect()
 ### IVS — Social Vulnerability Index
 
 **File:** `resultados/contextual/ivs_municipios_sp_2010.parquet`
-**Grain:** multiple rows per municipality (by household situation and weighting area; filter to `label_sit_dom == "Total Situação de Domicílio"` and take the row with maximum population for the overall municipal aggregate)
+**Grain:** multiple rows per municipality — demographic breakdowns by race (`label_cor`: Branco / Negro / Total Cor) × sex (`label_sexo`: Homem / Mulher / Total Sexo), each further split by household situation (`label_sit_dom`). **Note:** `label_cor` and `label_sexo` were not retained in this output file. To obtain the overall municipal value, filter `label_sit_dom == "Total Situação de Domicílio"` and take the **maximum-population** row per municipality — this is the "Total Cor × Total Sexo" cell, whose population is by construction larger than any subgroup (verified for all 645 municipalities). Weighting areas (UDH) are *not* present here; they were excluded at the `nivel` filter in `07_build_outputs.R`.
 **Period:** Census 2010
 **Source:** IPEA / Atlas do Desenvolvimento Humano
 
