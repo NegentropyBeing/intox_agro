@@ -1,0 +1,174 @@
+---
+title: "Population Pyramids — São Paulo Municipalities"
+subtitle: "Showcase using populacao_sp_municipio_ano.parquet"
+date: today
+format:
+  html:
+    toc: true
+    toc-depth: 2
+    code-fold: true
+    self-contained: true
+execute:
+  warning: false
+  message: false
+---
+
+## 1. Setup
+
+```{r}
+library(arrow)
+library(dplyr)
+library(tidyr)
+library(ggplot2)
+
+project_root <- "c:/Users/alexa/Desktop/intox_agro" # Change according to the root path for your database folder 
+```
+
+---
+
+## 2. Load population data
+
+The source file has one row per municipality × year × sex × single-year age.
+
+```{r}
+pop_raw <- read_parquet(
+  file.path(project_root, "resultados/contextual/populacao_sp_municipio_ano.parquet")
+)
+
+glimpse(pop_raw)
+```
+
+---
+
+## 3. Build age groups (5-year bands)
+
+Single-year age is too granular for a readable pyramid. Group into standard 5-year bands, with an open-ended "80+" top band.
+
+```{r}
+pop_grouped <- pop_raw |>
+  mutate(
+    faixa_etaria = case_when(
+      idade < 5   ~ "0-4",
+      idade < 10  ~ "5-9",
+      idade < 15  ~ "10-14",
+      idade < 20  ~ "15-19",
+      idade < 25  ~ "20-24",
+      idade < 30  ~ "25-29",
+      idade < 35  ~ "30-34",
+      idade < 40  ~ "35-39",
+      idade < 45  ~ "40-44",
+      idade < 50  ~ "45-49",
+      idade < 55  ~ "50-54",
+      idade < 60  ~ "55-59",
+      idade < 65  ~ "60-64",
+      idade < 70  ~ "65-69",
+      idade < 75  ~ "70-74",
+      idade < 80  ~ "75-79",
+      TRUE        ~ "80+"
+    ),
+    faixa_etaria = factor(faixa_etaria, levels = c(
+      "0-4","5-9","10-14","15-19","20-24","25-29","30-34","35-39","40-44",
+      "45-49","50-54","55-59","60-64","65-69","70-74","75-79","80+"
+    ))
+  ) |>
+  group_by(cod_ibge, ano, sexo, faixa_etaria) |>
+  summarise(populacao = sum(populacao, na.rm = TRUE), .groups = "drop")
+```
+
+---
+
+## 4. Pyramid function (single municipality × year)
+
+Male population is plotted as negative values so it extends left, female extends right — the standard pyramid convention.
+
+```{r}
+plot_pyramid <- function(df, municipio_cod, ano_ref, municipio_nome = NULL) {
+
+  d <- df |>
+    filter(cod_ibge == municipio_cod, ano == ano_ref) |>
+    mutate(
+      populacao_plot = if_else(sexo == "Masculino", -populacao, populacao)
+    )
+
+  titulo <- if (!is.null(municipio_nome)) {
+    paste0(municipio_nome, " — ", ano_ref)
+  } else {
+    paste0("Municipality ", municipio_cod, " — ", ano_ref)
+  }
+
+  max_val <- max(d$populacao, na.rm = TRUE)
+
+  ggplot(d, aes(x = faixa_etaria, y = populacao_plot, fill = sexo)) +
+    geom_col(width = 0.85) +
+    coord_flip() +
+    scale_y_continuous(
+      labels = \(x) scales::comma(abs(x)),
+      limits = c(-max_val * 1.1, max_val * 1.1)
+    ) +
+    scale_fill_manual(values = c("Masculino" = "#1C7293", "Feminino" = "#C0392B")) +
+    labs(
+      title = titulo,
+      x = "Age group", y = "Population", fill = NULL
+    ) +
+    theme_minimal(base_size = 12) +
+    theme(
+      plot.title = element_text(face = "bold"),
+      legend.position = "top",
+      panel.grid.minor = element_blank()
+    )
+}
+```
+
+---
+
+## 5. Example — São Paulo capital (cod_ibge 355030), 2024
+
+```{r}
+plot_pyramid(pop_grouped, "355030", 2024, "São Paulo (capital)")
+```
+
+---
+
+## 6. Example — comparing two years for the same municipality
+
+Useful to visualize population aging over time.
+
+```{r}
+plot_pyramid(pop_grouped, "355030", 2014, "São Paulo (capital)")
+```
+
+```{r}
+plot_pyramid(pop_grouped, "355030", 2024, "São Paulo (capital)")
+```
+
+---
+
+## 7. Faceted pyramid — multiple municipalities, same year
+
+Compare the population structure of a few municipalities side by side.
+
+```{r}
+municipios_exemplo <- c("355030", "350010", "354880")  # adjust codes as needed
+ano_exemplo <- 2024
+
+pop_grouped |>
+  filter(cod_ibge %in% municipios_exemplo, ano == ano_exemplo) |>
+  mutate(populacao_plot = if_else(sexo == "Masculino", -populacao, populacao)) |>
+  ggplot(aes(x = faixa_etaria, y = populacao_plot, fill = sexo)) +
+  geom_col(width = 0.85) +
+  coord_flip() +
+  facet_wrap(~cod_ibge, scales = "free_x") +
+  scale_y_continuous(labels = \(x) scales::comma(abs(x))) +
+  scale_fill_manual(values = c("Masculino" = "#1C7293", "Feminino" = "#C0392B")) +
+  labs(title = paste("Population structure —", ano_exemplo),
+       x = "Age group", y = "Population", fill = NULL) +
+  theme_minimal(base_size = 11) +
+  theme(legend.position = "top", panel.grid.minor = element_blank())
+```
+
+---
+
+## 8. Notes
+
+- Replace the municipality codes in Sections 5–7 with any valid `cod_ibge` from the dataset to explore other municipalities.
+- For rate or share-based pyramids (% of total population per band, rather than absolute counts), divide `populacao` by the municipality's `pop_total` for that year before plotting — useful when comparing municipalities of very different sizes.
