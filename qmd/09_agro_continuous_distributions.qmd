@@ -21,6 +21,7 @@ library(dplyr)
 library(tidyr)
 library(ggplot2)
 library(knitr)
+library(microdatasus)
 
 project_root <- "c:/Users/alexa/Desktop/intox_agro"
 ```
