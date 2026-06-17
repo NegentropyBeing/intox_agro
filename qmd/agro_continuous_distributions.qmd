@@ -1,0 +1,231 @@
+---
+title: "Agricultural Variables — Continuous Distributions"
+subtitle: "Quartile and Quintile Analysis | São Paulo state municipalities"
+date: today
+format:
+  html:
+    toc: true
+    toc-depth: 3
+    code-fold: true
+    self-contained: true
+execute:
+  warning: false
+  message: false
+---
+
+## 1. Setup
+
+```{r}
+library(arrow)
+library(dplyr)
+library(tidyr)
+library(ggplot2)
+library(knitr)
+
+project_root <- "c:/Users/alexa/Desktop/intox_agro"
+```
+
+---
+
+## 2. Load and prepare municipality-level base
+
+PAM and CAGED are annual — averaged across available years. Fixed covariates (Censo Agro 2017, Urban/Rural 2022) take the first non-NA value since they repeat across all years.
+
+```{r}
+base_full <- read_parquet(
+  file.path(project_root, "resultados/base_consolidada_sp_2014_2024.parquet")
+) |>
+  mutate(cod_ibge = as.character(cod_ibge))
+
+base_mun <- base_full |>
+  select(cod_ibge, nome_municipio,
+         pam_area_colhida_ha, pam_valor_prod_mil_reais,
+         censo_pct_uso_agrotox, censo_valor_agrotox_mil,
+         censo_uso_total_estab,
+         caged_admissoes_agro,
+         pct_rural_2022) |>
+  group_by(cod_ibge, nome_municipio) |>
+  summarise(
+    pam_area_colhida_ha_media      = mean(pam_area_colhida_ha,        na.rm = TRUE),
+    pam_valor_prod_mil_reais_media = mean(pam_valor_prod_mil_reais,   na.rm = TRUE),
+    caged_admissoes_agro_media     = mean(caged_admissoes_agro,       na.rm = TRUE),
+    censo_pct_uso_agrotox          = first(na.omit(censo_pct_uso_agrotox)),
+    censo_valor_agrotox_mil        = first(na.omit(censo_valor_agrotox_mil)),
+    censo_uso_total_estab          = first(na.omit(censo_uso_total_estab)),
+    pct_rural_2022                 = first(na.omit(pct_rural_2022)),
+    .groups = "drop"
+  ) |>
+  mutate(
+    agrotox_por_hectare = ifelse(
+      pam_area_colhida_ha_media > 0,
+      censo_valor_agrotox_mil / pam_area_colhida_ha_media,
+      NA_real_
+    )
+  )
+
+cat("Municipalities:", nrow(base_mun))
+```
+
+---
+
+## 3. Helper functions
+
+```{r}
+# Numeric summary
+summarise_continuous <- function(df, var) {
+  x <- df[[var]]
+  x_valid <- x[!is.na(x)]
+  tibble(
+    Variable  = var,
+    N         = length(x_valid),
+    N_missing = sum(is.na(x)),
+    Min       = round(min(x_valid), 2),
+    Mean      = round(mean(x_valid), 2),
+    Median    = round(median(x_valid), 2),
+    Max       = round(max(x_valid), 2),
+    SD        = round(sd(x_valid), 2)
+  )
+}
+
+# Quantile frequency table
+make_quantile_table <- function(df, var, n_breaks = 5) {
+  x <- df[[var]]
+  x_valid <- x[!is.na(x)]
+  probs  <- seq(0, 1, length.out = n_breaks + 1)
+  breaks <- unique(quantile(x_valid, probs = probs))
+
+  if (length(breaks) < 3) return(tibble(Note = "Not enough distinct values"))
+
+  group_label <- if (n_breaks == 4) "Quartile" else "Quintile"
+  labels <- paste0(group_label, " ", seq_len(length(breaks) - 1))
+  grp <- cut(x_valid, breaks = breaks, labels = labels, include.lowest = TRUE)
+
+  as.data.frame(table(grp)) |>
+    rename(Group = grp, N = Freq) |>
+    mutate(
+      `%`   = round(100 * N / sum(N), 1),
+      Range = paste0("[",
+                     round(breaks[-length(breaks)], 2),
+                     " - ",
+                     round(breaks[-1], 2),
+                     "]")
+    ) |>
+    select(Group, Range, N, `%`)
+}
+
+# Histogram helper
+plot_hist <- function(df, var, label) {
+  x <- df[[var]]
+  x <- x[!is.na(x)]
+  ggplot(data.frame(x = x), aes(x)) +
+    geom_histogram(bins = 30, fill = "steelblue", colour = "white", alpha = 0.8) +
+    labs(title = label, x = NULL, y = "Count") +
+    theme_minimal()
+}
+```
+
+---
+
+## 4. PAM — Mean harvested area (ha)
+
+```{r}
+summarise_continuous(base_mun, "pam_area_colhida_ha_media") |> kable()
+make_quantile_table(base_mun, "pam_area_colhida_ha_media", n_breaks = 5) |> kable()
+plot_hist(base_mun, "pam_area_colhida_ha_media", "PAM — Mean harvested area (ha)")
+```
+
+---
+
+## 5. Censo Agro — % establishments using pesticides
+
+```{r}
+summarise_continuous(base_mun, "censo_pct_uso_agrotox") |> kable()
+make_quantile_table(base_mun, "censo_pct_uso_agrotox", n_breaks = 5) |> kable()
+plot_hist(base_mun, "censo_pct_uso_agrotox", "Censo Agro — % establishments using pesticides")
+```
+
+---
+
+## 6. Censo Agro — Pesticide spending (thousand BRL)
+
+```{r}
+summarise_continuous(base_mun, "censo_valor_agrotox_mil") |> kable()
+make_quantile_table(base_mun, "censo_valor_agrotox_mil", n_breaks = 5) |> kable()
+plot_hist(base_mun, "censo_valor_agrotox_mil", "Censo Agro — Pesticide spending (thousand BRL)")
+```
+
+---
+
+## 7. PAM — Mean agricultural production value (thousand BRL)
+
+```{r}
+summarise_continuous(base_mun, "pam_valor_prod_mil_reais_media") |> kable()
+make_quantile_table(base_mun, "pam_valor_prod_mil_reais_media", n_breaks = 5) |> kable()
+plot_hist(base_mun, "pam_valor_prod_mil_reais_media", "PAM — Mean production value (thousand BRL)")
+```
+
+---
+
+## 8. CAGED — Mean formal agricultural admissions
+
+```{r}
+summarise_continuous(base_mun, "caged_admissoes_agro_media") |> kable()
+make_quantile_table(base_mun, "caged_admissoes_agro_media", n_breaks = 5) |> kable()
+plot_hist(base_mun, "caged_admissoes_agro_media", "CAGED — Mean formal agricultural admissions")
+```
+
+> **Note:** 17 months in 2014–2019 are missing from CAGED due to corrupt source files.
+> Annual means for those years are underestimates.
+
+---
+
+## 9. Urban/Rural — % rural population (Census 2022)
+
+```{r}
+summarise_continuous(base_mun, "pct_rural_2022") |> kable()
+make_quantile_table(base_mun, "pct_rural_2022", n_breaks = 5) |> kable()
+plot_hist(base_mun, "pct_rural_2022", "Urban/Rural — % rural population (Census 2022)")
+```
+
+---
+
+## 10. Derived — Pesticide spending per harvested hectare
+
+```{r}
+summarise_continuous(base_mun, "agrotox_por_hectare") |> kable()
+make_quantile_table(base_mun, "agrotox_por_hectare", n_breaks = 5) |> kable()
+plot_hist(base_mun, "agrotox_por_hectare", "Derived — Pesticide spending per harvested hectare")
+```
+
+---
+
+## 11. Save municipality base with quantile group columns
+
+```{r}
+assign_quantile_group <- function(x, n_breaks = 5) {
+  probs  <- seq(0, 1, length.out = n_breaks + 1)
+  breaks <- unique(quantile(x, probs = probs, na.rm = TRUE))
+  cut(x, breaks = breaks,
+      labels = paste0("Q", seq_len(length(breaks) - 1)),
+      include.lowest = TRUE)
+}
+
+base_mun_groups <- base_mun |>
+  mutate(
+    q5_area_colhida    = assign_quantile_group(pam_area_colhida_ha_media,      5),
+    q5_pct_agrotox     = assign_quantile_group(censo_pct_uso_agrotox,          5),
+    q5_valor_agrotox   = assign_quantile_group(censo_valor_agrotox_mil,        5),
+    q5_valor_prod      = assign_quantile_group(pam_valor_prod_mil_reais_media, 5),
+    q5_caged_admissoes = assign_quantile_group(caged_admissoes_agro_media,     5),
+    q4_pct_rural       = assign_quantile_group(pct_rural_2022,                 4),
+    q5_agrotox_hectare = assign_quantile_group(agrotox_por_hectare,            5)
+  )
+
+write_parquet(
+  base_mun_groups,
+  file.path(project_root, "resultados/agro_municipios_grupos_quantis.parquet")
+)
+
+cat("Saved: resultados/agro_municipios_grupos_quantis.parquet\n")
+glimpse(base_mun_groups)
+```
