@@ -23,7 +23,7 @@ library(ggplot2)
 ## Dataset
 
 ```{r}
-ivs <- read_parquet("C:/Users/alyss/Desktop/Brasil/Analysis/dados_current - 2026-06-09/Dados/resultados/contextual/ivs_municipios_sp_2010.parquet")
+ivs <- read_parquet("C:/Users/alyss/Documents/GitHub/intox_agro/resultados/contextual/ivs_municipios_sp_2010.parquet")
 ```
 
 ### Cleaning

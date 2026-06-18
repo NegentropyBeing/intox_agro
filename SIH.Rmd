@@ -51,7 +51,7 @@ SIH_clean <- SIH |>
 *This dataset already has transformed variables from SIH*
 
 ```{r}
-consolidado <- read_parquet("C:/Users/alyss/Desktop/Brasil/Analysis/dados_current - 2026-06-09/Dados/resultados/base_consolidada_sp_2014_2024.parquet")
+consolidado <- read_parquet("C:/Users/alyss/Documents/GitHub/intox_agro/resultados/base_consolidada_sp_2014_2024.parquet")
 ```
 
 # Hospitalization per 100K

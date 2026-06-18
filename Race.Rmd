@@ -27,7 +27,7 @@ library(kableExtra)
 # Race Dataset
 
 ```{r}
-race <- read_excel("C:/Users/alyss/Desktop/Brasil/Analysis/dados_current - 2026-06-09/pop_raca_cor_2022_clean.xlsx")
+race <- read_parquet("C:/Users/alyss/Documents/GitHub/intox_agro/resultados/contextual/pop_raca_cor_sp_2022.parquet")
 
 ```
 
