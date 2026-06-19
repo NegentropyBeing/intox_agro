@@ -1,0 +1,458 @@
+---
+title: "IVS"
+output: html_document
+date: "2026-06-11"
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+##### Packages
+
+```{r}
+library(readr)
+library(arrow)
+library(readxl)
+library(dplyr)
+library(ggplot2)
+library(tidyr)
+library(purrr)
+library(DataExplorer)
+library(knitr)
+library(kableExtra)
+```
+
+##### Dataset
+
+```{r}
+ivs <- read_parquet("C:/Users/alyss/Documents/GitHub/intox_agro/resultados/contextual/ivs_municipios_sp_2010.parquet")
+```
+
+##### Cleaning
+
+```{r}
+#filter
+ivs_clean <- ivs |>
+  filter(label_sit_dom == "Total Situação de Domicílio")
+
+ivs_clean <- ivs_clean |>
+  filter(label_sexo == "Total Sexo")
+
+ivs_clean <- ivs_clean |>
+  filter(label_cor == "Total Cor")
+```
+
+```{r}
+#variable class
+
+class(ivs_clean$ivs_renda_e_trabalho)
+class(ivs_clean$renda_per_capita)
+class(ivs_clean$i_gini)
+class(ivs_clean$t_analf_15m)
+class(ivs_clean$ivs_capital_humano)
+class(ivs_clean$t_sem_agua_esgoto)
+class(ivs_clean$t_sem_lixo)
+#make '-' NA
+
+ivs_clean[ivs_clean == "-"] <- NA
+
+#make numeric
+
+ivs_clean <- ivs_clean %>%
+  mutate(
+    across(
+      c(
+        ivs_renda_e_trabalho,
+        renda_per_capita,
+        i_gini,
+        t_analf_15m,
+        ivs_capital_humano,
+        t_sem_agua_esgoto,
+        t_sem_lixo
+      ),
+      ~ as.numeric(gsub(",", ".", .))))
+```
+
+### Missingness
+
+```{r}
+plot_missing(ivs_clean)
+```
+
+# Income & Employment 
+
+## Income and Labor Sub-Index
+
+### Distribution
+
+```{r}
+
+ivs_renda_e_trabalho_summary <- ivs_clean %>%
+  select(ivs_renda_e_trabalho) %>%
+  rename(value = ivs_renda_e_trabalho) %>%
+  mutate(
+    Quartile = ntile(desc(value), 4)
+  ) %>%
+  group_by(Quartile) %>%
+  summarise(
+    n = n(),
+    pct = round(100 * n() / nrow(ivs_clean), 1),
+    Median = median(value, na.rm = TRUE),
+    Min = min(value, na.rm = TRUE),
+    Max = max(value, na.rm = TRUE),
+    .groups = "drop"
+  ) %>%
+  mutate(
+    Variable = "Income and Labor Sub-Index",
+    Range = paste0(round(Min, 2), "-", round(Max, 2))
+  ) %>%
+  select(Variable, Quartile, n, pct, Median, Range)
+
+#kable
+ivs_renda_e_trabalho_summary %>%
+  kable(
+    digits = 1,
+    caption = "Distribution of Municipalities by Income and Labor Sub-Index",
+    col.names = c(
+      "Income and Labor Sub-Index",
+      "Quartile",
+      "n",
+      "%",
+      "Median (%)",
+      "Range"
+    )
+  ) %>%
+  collapse_rows(columns = 1) %>%
+  kable_styling(full_width = FALSE)
+```
+
+### Normality
+
+```{r}
+ggplot(ivs_clean, aes(x = ivs_renda_e_trabalho)) +
+  geom_histogram(bins = 30) +
+  theme_minimal()
+```
+
+## Per-Capita Income
+
+### Distribution
+
+```{r}
+
+renda_per_capita_summary <- ivs_clean %>%
+  select(renda_per_capita) %>%
+  rename(value = renda_per_capita) %>%
+  mutate(
+    Quartile = ntile(desc(value), 4)
+  ) %>%
+  group_by(Quartile) %>%
+  summarise(
+    n = n(),
+    pct = round(100 * n() / nrow(ivs_clean), 1),
+    Median = median(value, na.rm = TRUE),
+    Min = min(value, na.rm = TRUE),
+    Max = max(value, na.rm = TRUE),
+    .groups = "drop"
+  ) %>%
+  mutate(
+    Variable = "Per-Capita Income",
+    Range = paste0(round(Min, 2), "-", round(Max, 2))
+  ) %>%
+  select(Variable, Quartile, n, pct, Median, Range)
+
+#kable
+renda_per_capita_summary %>%
+  kable(
+    digits = 1,
+    caption = "Distribution of Municipalities by Per-Capita Income",
+    col.names = c(
+      "Per-Capita Income",
+      "Quartile",
+      "n",
+      "%",
+      "Median (%)",
+      "Range"
+    )
+  ) %>%
+  collapse_rows(columns = 1) %>%
+  kable_styling(full_width = FALSE)
+```
+
+### Normality
+
+```{r}
+ggplot(ivs_clean, aes(x = renda_per_capita)) +
+  geom_histogram(bins = 30) +
+  theme_minimal()
+```
+
+## Income Inequality - Gini Coefficient
+
+### Distribution
+
+```{r}
+
+i_gini_summary <- ivs_clean %>%
+  select(i_gini) %>%
+  rename(value = i_gini) %>%
+  mutate(
+    Quartile = ntile(desc(value), 4)
+  ) %>%
+  group_by(Quartile) %>%
+  summarise(
+    n = n(),
+    pct = round(100 * n() / nrow(ivs_clean), 1),
+    Median = median(value, na.rm = TRUE),
+    Min = min(value, na.rm = TRUE),
+    Max = max(value, na.rm = TRUE),
+    .groups = "drop"
+  ) %>%
+  mutate(
+    Variable = "Gini Index",
+    Range = paste0(round(Min, 2), "-", round(Max, 2))
+  ) %>%
+  select(Variable, Quartile, n, pct, Median, Range)
+
+#kable
+i_gini_summary %>%
+  kable(
+    digits = 1,
+    caption = "Distribution of Municipalities by Gini Index",
+    col.names = c(
+      "Gini Index",
+      "Quartile",
+      "n",
+      "%",
+      "Median (%)",
+      "Range"
+    )
+  ) %>%
+  collapse_rows(columns = 1) %>%
+  kable_styling(full_width = FALSE)
+```
+
+### Normality
+
+```{r}
+ggplot(ivs_clean, aes(x = i_gini)) +
+  geom_histogram(bins = 30) +
+  theme_minimal()
+```
+
+# Education
+
+## Adult Literacy Rate = \> 15 years
+
+### Distribution
+
+```{r}
+
+t_analf_15m_summary <- ivs_clean %>%
+  select(t_analf_15m) %>%
+  rename(value = t_analf_15m) %>%
+  mutate(
+    Quartile = ntile(desc(value), 4)
+  ) %>%
+  group_by(Quartile) %>%
+  summarise(
+    n = n(),
+    pct = round(100 * n() / nrow(ivs_clean), 1),
+    Median = median(value, na.rm = TRUE),
+    Min = min(value, na.rm = TRUE),
+    Max = max(value, na.rm = TRUE),
+    .groups = "drop"
+  ) %>%
+  mutate(
+    Variable = "Adult Literacy Rate",
+    Range = paste0(round(Min, 2), "-", round(Max, 2))
+  ) %>%
+  select(Variable, Quartile, n, pct, Median, Range)
+
+#kable
+t_analf_15m_summary %>%
+  kable(
+    digits = 1,
+    caption = "Distribution of Municipalities by Adult Literacy Rate",
+    col.names = c(
+      "Adult Literacy Rate",
+      "Quartile",
+      "n",
+      "%",
+      "Median (%)",
+      "Range"
+    )
+  ) %>%
+  collapse_rows(columns = 1) %>%
+  kable_styling(full_width = FALSE)
+```
+
+### Normality
+
+```{r}
+ggplot(ivs_clean, aes(x = t_analf_15m)) +
+  geom_histogram(bins = 30) +
+  theme_minimal()
+```
+
+## Human Capital Sub-Index
+
+### Distribution
+
+```{r}
+
+ivs_capital_humano_summary <- ivs_clean %>%
+  select(ivs_capital_humano) %>%
+  rename(value = ivs_capital_humano) %>%
+  mutate(
+    Quartile = ntile(desc(value), 4)
+  ) %>%
+  group_by(Quartile) %>%
+  summarise(
+    n = n(),
+    pct = round(100 * n() / nrow(ivs_clean), 1),
+    Median = median(value, na.rm = TRUE),
+    Min = min(value, na.rm = TRUE),
+    Max = max(value, na.rm = TRUE),
+    .groups = "drop"
+  ) %>%
+  mutate(
+    Variable = "Human Capital Sub-Index",
+    Range = paste0(round(Min, 2), "-", round(Max, 2))
+  ) %>%
+  select(Variable, Quartile, n, pct, Median, Range)
+
+#kable
+ivs_capital_humano_summary %>%
+  kable(
+    digits = 1,
+    caption = "Distribution of Municipalities by Human Capital Sub-Index",
+    col.names = c(
+      "Human Capital Sub-Index",
+      "Quartile",
+      "n",
+      "%",
+      "Median (%)",
+      "Range"
+    )
+  ) %>%
+  collapse_rows(columns = 1) %>%
+  kable_styling(full_width = FALSE)
+```
+
+### Normality
+
+```{r}
+ggplot(ivs_clean, aes(x = ivs_capital_humano)) +
+  geom_histogram(bins = 30) +
+  theme_minimal()
+```
+
+# Sanitation & Environmental Exposure
+
+## Households without Piped Water or Sewage
+
+### Distribution
+
+```{r}
+
+t_sem_agua_esgoto_summary <- ivs_clean %>%
+  select(t_sem_agua_esgoto) %>%
+  rename(value = t_sem_agua_esgoto) %>%
+  mutate(
+    Quartile = ntile(desc(value), 4)
+  ) %>%
+  group_by(Quartile) %>%
+  summarise(
+    n = n(),
+    pct = round(100 * n() / nrow(ivs_clean), 1),
+    Median = median(value, na.rm = TRUE),
+    Min = min(value, na.rm = TRUE),
+    Max = max(value, na.rm = TRUE),
+    .groups = "drop"
+  ) %>%
+  mutate(
+    Variable = "Households without Piped Water or Sewage",
+    Range = paste0(round(Min, 2), "-", round(Max, 2))
+  ) %>%
+  select(Variable, Quartile, n, pct, Median, Range)
+
+#kable
+t_sem_agua_esgoto_summary %>%
+  kable(
+    digits = 1,
+    caption = "Distribution of Municipalities by Households without Piped Water or Sewage",
+    col.names = c(
+      "Households without Piped Water or Sewage",
+      "Quartile",
+      "n",
+      "%",
+      "Median (%)",
+      "Range"
+    )
+  ) %>%
+  collapse_rows(columns = 1) %>%
+  kable_styling(full_width = FALSE)
+```
+
+### Normality
+
+```{r}
+ggplot(ivs_clean, aes(x = t_sem_agua_esgoto)) +
+  geom_histogram(bins = 30) +
+  theme_minimal()
+```
+
+## Households without Garbage Collection
+
+### Distribution
+
+```{r}
+
+t_sem_lixo_summary <- ivs_clean %>%
+  select(t_sem_lixo) %>%
+  rename(value = t_sem_lixo) %>%
+  mutate(
+    Quartile = ntile(desc(value), 4)
+  ) %>%
+  group_by(Quartile) %>%
+  summarise(
+    n = n(),
+    pct = round(100 * n() / nrow(ivs_clean), 1),
+    Median = median(value, na.rm = TRUE),
+    Min = min(value, na.rm = TRUE),
+    Max = max(value, na.rm = TRUE),
+    .groups = "drop"
+  ) %>%
+  mutate(
+    Variable = "Households without Garbage Collection",
+    Range = paste0(round(Min, 2), "-", round(Max, 2))
+  ) %>%
+  select(Variable, Quartile, n, pct, Median, Range)
+
+#kable
+t_sem_lixo_summary %>%
+  kable(
+    digits = 1,
+    caption = "Distribution of Municipalities by Households without Garbage Collection",
+    col.names = c(
+      "Households without Garbage Collection",
+      "Quartile",
+      "n",
+      "%",
+      "Median (%)",
+      "Range"
+    )
+  ) %>%
+  collapse_rows(columns = 1) %>%
+  kable_styling(full_width = FALSE)
+```
+
+### Normality
+
+```{r}
+ggplot(ivs_clean, aes(x = t_sem_lixo)) +
+  geom_histogram(bins = 30) +
+  theme_minimal()
+```
