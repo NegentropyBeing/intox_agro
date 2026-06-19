@@ -47,7 +47,9 @@ ipvs <- ipvs |>
 
 ```
 
-## Distribution of High IPVS
+# High IPVS
+
+## Distribution
 
 ```{r}
 ipvs_summary <- ipvs %>%
@@ -73,8 +75,6 @@ ipvs_summary <- ipvs %>%
 
 ipvs_summary
 ```
-
-## Neat Table
 
 ```{r}
 ipvs_summary %>%

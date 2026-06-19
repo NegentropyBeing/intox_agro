@@ -10,7 +10,7 @@ date: "2026-06-12"
 knitr::opts_chunk$set(echo = TRUE)
 ```
 
-## Packages
+##### Packages
 
 ```{r}
 library(readr)
@@ -24,14 +24,14 @@ library(knitr)
 library(kableExtra)
 ```
 
-# Race Dataset
+##### Race Dataset
 
 ```{r}
 race <- read_parquet("C:/Users/alyss/Documents/GitHub/intox_agro/resultados/contextual/pop_raca_cor_sp_2022.parquet")
 
 ```
 
-## Clean
+##### Clean
 
 ```{r}
 
