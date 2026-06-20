@@ -1,0 +1,113 @@
+---
+title: "IPVS"
+output: html_document
+date: "2026-06-11"
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## Packages
+
+```{r}
+library(arrow) 
+library(readr) 
+library(dplyr) 
+library(ggplot2)
+library(tidyr)
+library(purrr)
+library(knitr)
+library(kableExtra)
+```
+
+## Dataset
+
+```{r}
+ipvs <- read_parquet("C:/Users/alyss/Desktop/Brasil/Analysis/dados_current - 2026-06-09/Dados/resultados/contextual/ipvs_municipios_sp.parquet")
+```
+
+### Missingness
+
+```{r}
+sum(is.na(ipvs))
+```
+
+## Clean
+
+```{r}
+ipvs <- ipvs |>
+  mutate(
+    ipvs_low = 
+      ipvs_pct_grupo1 + ipvs_pct_grupo2,
+    ipvs_medium =
+      ipvs_pct_grupo3 + ipvs_pct_grupo4,
+    ipvs_high =
+      ipvs_pct_grupo5 + ipvs_pct_grupo6)
+
+```
+
+## Distribution of High IPVS
+
+```{r}
+ipvs_summary <- ipvs %>%
+  select(ipvs_high) %>%
+  rename(value = ipvs_high) %>%
+  mutate(
+    Quartile = ntile(desc(value), 4)
+  ) %>%
+  group_by(Quartile) %>%
+  summarise(
+    n = n(),
+    pct = round(100 * n() / nrow(ipvs), 1),
+    Median = median(value, na.rm = TRUE),
+    Min = min(value, na.rm = TRUE),
+    Max = max(value, na.rm = TRUE),
+    .groups = "drop"
+  ) %>%
+  mutate(
+    Variable = "IPVS High",
+    Range = paste0(round(Min, 2), "-", round(Max, 2))
+  ) %>%
+  select(Variable, Quartile, n, pct, Median, Range)
+
+ipvs_summary
+```
+
+## Neat Table
+
+```{r}
+ipvs_summary %>%
+  kable(
+    digits = 1,
+    caption = "Distribution of Municipalities by High/Very High IPVS",
+    col.names = c(
+      "High IPVS",
+      "Quartile",
+      "n",
+      "%",
+      "Median (%)",
+      "Range"
+    )
+  ) %>%
+  collapse_rows(columns = 1) %>%
+  kable_styling(full_width = FALSE)
+```
+
+## Normality
+
+```{r}
+ipvs_vars <- c("ipvs_low", "ipvs_medium", "ipvs_high")
+
+ipvs %>%
+  select(all_of(ipvs_vars)) %>%
+  pivot_longer(
+    cols = everything(),
+    names_to = "ipvs",
+    values_to = "value"
+  ) %>%
+  ggplot(aes(x = value)) +
+  geom_histogram(bins = 20) +
+  facet_wrap(~ ipvs, scales = "free") +
+  theme_minimal()
+```

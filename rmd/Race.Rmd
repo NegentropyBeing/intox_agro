@@ -1,0 +1,195 @@
+---
+title: "Race"
+output:
+  html_document: default
+  pdf_document: default
+date: "2026-06-12"
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## Packages
+
+```{r}
+library(readr)
+library(readxl)
+library(dplyr)
+library(ggplot2)
+library(tidyr)
+library(purrr)
+library(DataExplorer)
+library(knitr)
+library(kableExtra)
+```
+
+# Race Dataset
+
+```{r}
+race <- read_excel("C:/Users/alyss/Desktop/Brasil/Analysis/dados_current - 2026-06-09/pop_raca_cor_2022_clean.xlsx")
+
+```
+
+## Clean
+
+```{r}
+
+plot_missing(race)
+
+race_sp <- race %>%
+  filter(Codigo >= 350000 & Codigo < 360000)
+
+
+library(dplyr)
+
+race_sp <- race_sp %>%
+  mutate(
+    across(
+      c(Branca, Preta, Amarela, Parda, Indígena),
+      ~ as.numeric(.)))
+```
+
+### Missingness
+
+```{r}
+race_sp |>   
+  filter(is.na(Branca)) |>
+  select(Codigo, Branca)
+
+race_sp |>   
+  filter(is.na(Amarela)) |>   
+  select(Codigo, Amarela)  
+
+race_sp |>   
+  filter(is.na(Preta)) |>   
+  select(Codigo, Preta)  
+
+race_sp |>   
+  filter(is.na(Indígena)) |>   
+  select(Codigo, Indígena)
+```
+
+Indígena: missing for 73 municipalities
+
+Amarela: missing for 2 municipalities
+
+Preta: no missing
+
+Branca: no missing
+
+## Raw Distribution
+
+```{r}
+
+#create quartiles
+race_sp <- race_sp %>%
+  mutate(
+    Branca_Q   = ntile(desc(Branca), 4),
+    Preta_Q    = ntile(desc(Preta), 4),
+    Amarela_Q  = ntile(desc(Amarela), 4),
+    Parda_Q    = ntile(desc(Parda), 4),
+    Indigena_Q = ntile(desc(`Indígena`), 4)
+  )
+
+#table 1
+race_long <- race_sp %>%
+  pivot_longer(
+    cols = c(Branca, Preta, Amarela, Parda, `Indígena`),
+    names_to = "Race",
+    values_to = "Percent"
+  ) %>%
+  group_by(Race) %>%
+  mutate(
+    Quartile = ntile(desc(Percent), 4)
+  ) %>%
+  group_by(Race, Quartile) %>%
+  summarise(
+    n = n(),
+    Mean = mean(Percent, na.rm = TRUE),
+    SD = sd(Percent, na.rm = TRUE),
+    Min = min(Percent, na.rm = TRUE),
+    Max = max(Percent, na.rm = TRUE),
+    .groups = "drop"
+  )
+
+race_long
+```
+
+### Distribution Grouping Race
+
+```{r}
+race_sp <- race_sp %>%
+  mutate(
+    Other = Amarela + Indígena + Preta)
+```
+
+```{r}
+race_vars <- c("Branca", "Parda", "Other")
+
+quartile_summary <- map_dfr(race_vars, function(var) {
+  
+  race_sp %>%
+    select(all_of(var)) %>%
+    rename(value = all_of(var)) %>%
+    mutate(
+      Quartile = ntile(desc(value), 4)
+    ) %>%
+    group_by(Quartile) %>%
+    summarise(
+      n = n(),
+      pct = round(100 * n() / nrow(race_sp), 1),
+      median = median(value, na.rm = TRUE),
+      min = min(value, na.rm = TRUE),
+      max = max(value, na.rm = TRUE),
+      .groups = "drop"
+    ) %>%
+    mutate(
+      Race = var,
+      Range = paste0(round(min, 1), "–", round(max, 1))
+    ) %>%
+    select(Race, Quartile, n, pct, median, Range)
+})
+
+quartile_summary
+```
+
+## Neat Table
+
+```{r}
+quartile_summary %>%
+  kable(
+    digits = 1,
+    caption = "Distribution of Municipalities by Race Quartile",
+    col.names = c(
+      "Race",
+      "Quartile",
+      "n",
+      "%",
+      "Median (%)",
+      "Range"
+    )
+  ) %>%
+  collapse_rows(columns = 1) %>%
+  kable_styling(full_width = FALSE)
+```
+
+## Normality
+
+```{r}
+
+race_vars <- c("Branca", "Parda", "Other")
+
+
+race_sp %>%
+  select(all_of(race_vars)) %>%
+  pivot_longer(
+    cols = everything(),
+    names_to = "race",
+    values_to = "value"
+  ) %>%
+  ggplot(aes(x = value)) +
+  geom_histogram(bins = 20) +
+  facet_wrap(~ race, scales = "free") +
+  theme_minimal()
+```
