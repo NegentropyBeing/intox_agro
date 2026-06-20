@@ -1,0 +1,1 @@
+project_root <- "c:/Users/alexa/Desktop/intox_agro"

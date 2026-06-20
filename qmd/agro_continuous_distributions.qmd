@@ -22,7 +22,7 @@ library(tidyr)
 library(ggplot2)
 library(knitr)
 
-project_root <- "c:/Users/alexa/Desktop/intox_agro"
+source(file.path(rprojroot::find_rstudio_root_file(), "config.R"))
 ```
 
 ---
