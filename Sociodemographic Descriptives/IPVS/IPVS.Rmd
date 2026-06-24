@@ -24,11 +24,7 @@ library(kableExtra)
 ## Dataset
 
 ```{r}
-<<<<<<<< HEAD:Sociodemographic Descriptives/IPVS.Rmd
-ipvs <- read_parquet("C:/Users/alyss/Documents/GitHub/intox_agro/resultados/contextual/ipvs_municipios_sp.parquet")
-========
 ipvs <- read_parquet("C:/Users/alyss/Desktop/Brasil/Analysis/dados_current - 2026-06-09/Dados/resultados/contextual/ipvs_municipios_sp.parquet")
->>>>>>>> f7a84ff72aefeb971b8c40967211a0513be32e62:rmd/IPVS.Rmd
 ```
 
 ### Missingness
@@ -51,13 +47,7 @@ ipvs <- ipvs |>
 
 ```
 
-<<<<<<<< HEAD:Sociodemographic Descriptives/IPVS.Rmd
-# High IPVS
-
-## Distribution
-========
 ## Distribution of High IPVS
->>>>>>>> f7a84ff72aefeb971b8c40967211a0513be32e62:rmd/IPVS.Rmd
 
 ```{r}
 ipvs_summary <- ipvs %>%
@@ -84,11 +74,8 @@ ipvs_summary <- ipvs %>%
 ipvs_summary
 ```
 
-<<<<<<<< HEAD:Sociodemographic Descriptives/IPVS.Rmd
-========
 ## Neat Table
 
->>>>>>>> f7a84ff72aefeb971b8c40967211a0513be32e62:rmd/IPVS.Rmd
 ```{r}
 ipvs_summary %>%
   kable(

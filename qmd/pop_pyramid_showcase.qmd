@@ -21,7 +21,7 @@ library(dplyr)
 library(tidyr)
 library(ggplot2)
 
-project_root <- "c:/Users/alexa/Desktop/intox_agro" # Change according to the root path for your database folder 
+source(file.path(rprojroot::find_rstudio_root_file(), "config.R"))
 ```
 
 ---

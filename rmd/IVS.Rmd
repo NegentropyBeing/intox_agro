@@ -8,6 +8,7 @@ date: "2026-06-11"
 knitr::opts_chunk$set(echo = TRUE)
 ```
 
+<<<<<<< HEAD:IVS.Rmd
 ##### Packages
 
 ```{r}
@@ -455,4 +456,31 @@ t_sem_lixo_summary %>%
 ggplot(ivs_clean, aes(x = t_sem_lixo)) +
   geom_histogram(bins = 30) +
   theme_minimal()
+=======
+## Packages
+
+```{r}
+install.packages("arrow") 
+library(arrow) 
+library(readr) 
+install.packages("dplyr") 
+library(dplyr) 
+install.packages("ggplot2")
+library(ggplot2)
+```
+
+## Dataset
+
+```{r}
+ivs <- read_parquet("C:/Users/alyss/Desktop/Brasil/Analysis/dados_current - 2026-06-09/Dados/resultados/contextual/ivs_municipios_sp_2010.parquet")
+```
+
+### Cleaning
+
+```{r}
+ivs_clean <- ivs |>
+  filter(label_sit_dom == "Total Situação de Domicílio")
+
+
+>>>>>>> f7a84ff72aefeb971b8c40967211a0513be32e62:rmd/IVS.Rmd
 ```

@@ -271,6 +271,15 @@ Applied consistently across SIH, SINAN, and SIM:
 
 ---
 
+
+## Data Availability Disclaimer
+
+The repository automates processing wherever stable public interfaces were available. However, some historical data sources were not consistently accessible through automated download endpoints during the study period. 
+
+SISAGUA is the main example: historical records were assembled from XML exports, treated and joined through a simple python script *(not in this repo)*. These constituted the only reliable source available for the period covered by the study. Consequently, full reproduction of the raw-data acquisition stage may require access to archival files that are not generated directly by the scripts in this repository.
+
+---
+
 ## Notes for Analysts
 
 - **Join key:** all contextual and outcome files use `cod_ibge` (6-digit IBGE code).

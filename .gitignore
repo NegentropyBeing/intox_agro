@@ -6,6 +6,7 @@ Bancos/
 .Rhistory
 .RData
 .Ruserdata
+config.R
 
 # Intermediate/temp processing
 Processados/

@@ -26,22 +26,24 @@ library(DataExplorer)
 
 ### 1.1 Directory setup
 ```{r}
-# Set the directory so it works
-knitr::opts_knit$set(root.dir = "c:/Users/alexa/Desktop/Banco de Dados - Intox. Agro") # set your path
+
+source(file.path(rprojroot::find_rstudio_root_file(), "config.R"))
+
 ```
+
 ---
 
 ## 2. Load raw data
 
 ```{r}
 # Individual-level sources
-sisagua_raw  <- read_parquet("resultados/SISAGUA/sisagua_sp_2014_2024.parquet")
-sih_raw      <- read_parquet("resultados/SIH/sih_iexo_sp_2014_2024.parquet")
-sinan_raw    <- read_parquet("resultados/SINAN/sinan_iexo_sp_2014_2024.parquet")
-sim_raw      <- read_parquet("resultados/SIM/sim_iexo_sp_2014_2024.parquet")
+sisagua_raw <- read_parquet(file.path(project_root, "resultados/SISAGUA/sisagua_sp_2014_2024.parquet"))
+sih_raw     <- read_parquet(file.path(project_root, "resultados/SIH/sih_iexo_sp_2014_2024.parquet"))
+sinan_raw   <- read_parquet(file.path(project_root, "resultados/SINAN/sinan_iexo_sp_2014_2024.parquet"))
+sim_raw     <- read_parquet(file.path(project_root, "resultados/SIM/sim_iexo_sp_2014_2024.parquet"))
 
 # Population denominator (for rates)
-pop_raw      <- read_parquet("resultados/contextual/populacao_sp_municipio_ano.parquet")
+pop_raw     <- read_parquet(file.path(project_root, "resultados/contextual/populacao_sp_municipio_ano.parquet"))
 ```
 
 ---

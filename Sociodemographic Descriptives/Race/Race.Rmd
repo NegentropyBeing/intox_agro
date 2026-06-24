@@ -10,11 +10,12 @@ date: "2026-06-12"
 knitr::opts_chunk$set(echo = TRUE)
 ```
 
-##### Packages
+##### packages
 
 ```{r}
 library(readr)
 library(readxl)
+library(arrow)
 library(dplyr)
 library(ggplot2)
 library(tidyr)
@@ -24,50 +25,44 @@ library(knitr)
 library(kableExtra)
 ```
 
-##### Race Dataset
+##### Dataset
 
 ```{r}
 race <- read_parquet("C:/Users/alyss/Documents/GitHub/intox_agro/resultados/contextual/pop_raca_cor_sp_2022.parquet")
-
 ```
 
-##### Clean
+## Clean
 
 ```{r}
 
 plot_missing(race)
 
-race_sp <- race %>%
-  filter(Codigo >= 350000 & Codigo < 360000)
-
-
-library(dplyr)
-
-race_sp <- race_sp %>%
+race <- race %>%
   mutate(
     across(
-      c(Branca, Preta, Amarela, Parda, Indígena),
+      c(pct_branca, pct_preta, pct_amarela, pct_parda, pct_indigena),
       ~ as.numeric(.)))
+
 ```
 
 ### Missingness
 
 ```{r}
-race_sp |>   
-  filter(is.na(Branca)) |>
-  select(Codigo, Branca)
+race |>   
+  filter(is.na(pct_branca)) |>
+  select(cod_ibge, pct_branca)
 
-race_sp |>   
-  filter(is.na(Amarela)) |>   
-  select(Codigo, Amarela)  
+race |>   
+  filter(is.na(pct_amarela)) |>   
+  select(cod_ibge, pct_amarela)  
 
-race_sp |>   
-  filter(is.na(Preta)) |>   
-  select(Codigo, Preta)  
+race |>   
+  filter(is.na(pct_preta)) |>   
+  select(cod_ibge, pct_preta)  
 
-race_sp |>   
-  filter(is.na(Indígena)) |>   
-  select(Codigo, Indígena)
+race |>   
+  filter(is.na(pct_indigena)) |>   
+  select(cod_ibge, pct_indigena)
 ```
 
 Indígena: missing for 73 municipalities
@@ -78,24 +73,24 @@ Preta: no missing
 
 Branca: no missing
 
-## Raw Distribution
+## Ungrouped Distribution
 
 ```{r}
 
 #create quartiles
-race_sp <- race_sp %>%
+race <- race %>%
   mutate(
-    Branca_Q   = ntile(desc(Branca), 4),
-    Preta_Q    = ntile(desc(Preta), 4),
-    Amarela_Q  = ntile(desc(Amarela), 4),
-    Parda_Q    = ntile(desc(Parda), 4),
-    Indigena_Q = ntile(desc(`Indígena`), 4)
+    Branca_Q   = ntile(desc(pct_branca), 4),
+    Preta_Q    = ntile(desc(pct_preta), 4),
+    Amarela_Q  = ntile(desc(pct_amarela), 4),
+    Parda_Q    = ntile(desc(pct_parda), 4),
+    Indigena_Q = ntile(desc(`pct_indigena`), 4)
   )
 
 #table 1
-race_long <- race_sp %>%
+race_long <- race %>%
   pivot_longer(
-    cols = c(Branca, Preta, Amarela, Parda, `Indígena`),
+    cols = c(pct_branca, pct_preta, pct_amarela, pct_parda, `pct_indigena`),
     names_to = "Race",
     values_to = "Percent"
   ) %>%
@@ -119,17 +114,27 @@ race_long
 ### Distribution Grouping Race
 
 ```{r}
-race_sp <- race_sp %>%
+race <- race %>%
   mutate(
-    Other = Amarela + Indígena + Preta)
+    pct_other = pct_amarela + pct_indigena + pct_preta)
+
+#Make dataset with quartiles
+race_quartiles <- race %>%
+  mutate(
+    Branca_Q   = ntile(desc(pct_branca), 4),
+    Other_Q    = ntile(desc(pct_other), 4),
+    Parda_Q    = ntile(desc(pct_parda), 4))
+
+write.csv(race_quartiles, "race_quartiles.csv", row.names = FALSE)
+
 ```
 
 ```{r}
-race_vars <- c("Branca", "Parda", "Other")
+race_vars <- c("pct_branca", "pct_parda", "pct_other")
 
 quartile_summary <- map_dfr(race_vars, function(var) {
   
-  race_sp %>%
+  race %>%
     select(all_of(var)) %>%
     rename(value = all_of(var)) %>%
     mutate(
@@ -138,7 +143,7 @@ quartile_summary <- map_dfr(race_vars, function(var) {
     group_by(Quartile) %>%
     summarise(
       n = n(),
-      pct = round(100 * n() / nrow(race_sp), 1),
+      pct = round(100 * n() / nrow(race), 1),
       median = median(value, na.rm = TRUE),
       min = min(value, na.rm = TRUE),
       max = max(value, na.rm = TRUE),
@@ -174,14 +179,29 @@ quartile_summary %>%
   kable_styling(full_width = FALSE)
 ```
 
+## Chart
+
+```{r}
+
+#Median plot
+ggplot(quartile_summary,
+       aes(x = factor(Quartile),
+           y = median,
+           fill = Race)) +
+  geom_col(position = "dodge") +
+  labs(
+    x = "Quartile",
+    y = "Median",
+    title = "Median Racial Composition by Quartile"
+  ) +
+  theme_minimal()
+```
+
 ## Normality
 
 ```{r}
 
-race_vars <- c("Branca", "Parda", "Other")
-
-
-race_sp %>%
+race %>%
   select(all_of(race_vars)) %>%
   pivot_longer(
     cols = everything(),
@@ -193,3 +213,7 @@ race_sp %>%
   facet_wrap(~ race, scales = "free") +
   theme_minimal()
 ```
+
+## Raw Distribution - SP State
+
+## 
