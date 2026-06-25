@@ -8,29 +8,584 @@ date: "2026-06-11"
 knitr::opts_chunk$set(echo = TRUE)
 ```
 
-## Packages
+##### Packages
 
 ```{r}
-install.packages("arrow") 
-library(arrow) 
-library(readr) 
-install.packages("dplyr") 
-library(dplyr) 
-install.packages("ggplot2")
+library(readr)
+library(arrow)
+library(readxl)
+library(dplyr)
 library(ggplot2)
+library(tidyr)
+library(purrr)
+library(DataExplorer)
+library(knitr)
+library(kableExtra)
 ```
 
-## Dataset
+##### Dataset
 
 ```{r}
-ivs <- read_parquet("C:/Users/alyss/Desktop/Brasil/Analysis/dados_current - 2026-06-09/Dados/resultados/contextual/ivs_municipios_sp_2010.parquet")
+ivs <- read_parquet("C:/Users/alyss/Documents/GitHub/intox_agro/resultados/contextual/ivs_municipios_sp_2010.parquet")
 ```
 
-### Cleaning
+##### Cleaning
 
 ```{r}
+#filter
 ivs_clean <- ivs |>
   filter(label_sit_dom == "Total Situação de Domicílio")
 
+ivs_clean <- ivs_clean |>
+  filter(label_sexo == "Total Sexo")
 
+ivs_clean <- ivs_clean |>
+  filter(label_cor == "Total Cor")
+```
+
+```{r}
+#variable class
+
+class(ivs_clean$ivs_renda_e_trabalho)
+class(ivs_clean$renda_per_capita)
+class(ivs_clean$i_gini)
+class(ivs_clean$t_analf_15m)
+class(ivs_clean$ivs_capital_humano)
+class(ivs_clean$t_sem_agua_esgoto)
+class(ivs_clean$t_sem_lixo)
+#make '-' NA
+
+ivs_clean[ivs_clean == "-"] <- NA
+
+#make numeric
+
+ivs_clean <- ivs_clean |>
+  mutate(
+    across(
+      c(
+        ivs_renda_e_trabalho,
+        renda_per_capita,
+        i_gini,
+        t_analf_15m,
+        ivs_capital_humano,
+        t_sem_agua_esgoto,
+        t_sem_lixo
+      ),
+      ~ as.numeric(gsub(",", ".", .))))
+```
+
+### Missingness
+
+```{r}
+plot_missing(ivs_clean)
+```
+
+# Income & Employment
+
+## Income and Labor Sub-Index
+
+#### Create Quartiles
+
+```{r}
+ivs_clean <- ivs_clean |>
+  mutate(
+    ivs_renda_e_trabalho_quartile = ntile(desc(ivs_renda_e_trabalho), 4))
+```
+
+### Distribution
+
+```{r}
+
+ivs_renda_e_trabalho_summary <- ivs_clean |>
+  group_by(ivs_renda_e_trabalho_quartile) |>
+  summarise(
+    n = n(),
+    pct = round(100 * n() / nrow(ivs_clean), 1),
+    Median = median(ivs_renda_e_trabalho, na.rm = TRUE),
+    Min = min(ivs_renda_e_trabalho, na.rm = TRUE),
+    Max = max(ivs_renda_e_trabalho, na.rm = TRUE),
+    .groups = "drop") |>
+  mutate(
+    Variable = "Income and Labor Sub-Index",
+    Range = paste0(round(Min, 2), "-", round(Max, 2)) ) |>
+  rename(Quartile = ivs_renda_e_trabalho_quartile) |>
+  select(Variable, Quartile, n, pct, Median, Range)
+
+#kable
+ivs_renda_e_trabalho_summary |>
+  kable(
+    digits = 1,
+    caption = "Distribution of Municipalities by Income and Labor Sub-Index",
+    col.names = c(
+      "Income and Labor Sub-Index",
+      "Quartile",
+      "n",
+      "%",
+      "Median (%)",
+      "Range"
+    )
+  ) |>
+  collapse_rows(columns = 1) |>
+  kable_styling(full_width = FALSE)
+```
+
+### Plot
+
+```{r}
+ggplot(ivs_clean,
+       aes(x = factor(ivs_renda_e_trabalho_quartile),
+           y = ivs_renda_e_trabalho,
+           fill = factor(ivs_renda_e_trabalho_quartile))) +
+  geom_boxplot() +
+  labs(
+    title = "Income and Labor Sub-Index by Quartile",
+    x = "Quartile",
+    y = "Income and Labor Sub-Index",
+    fill = "Quartile"
+  ) +
+  theme_minimal()
+```
+
+### Normality
+
+```{r}
+ggplot(ivs_clean, aes(x = ivs_renda_e_trabalho)) +
+  geom_histogram(bins = 30) +
+  theme_minimal()
+```
+
+## Per-Capita Income
+
+#### Create Quartiles
+
+```{r}
+ivs_clean <- ivs_clean |>
+  mutate(
+    renda_per_capita_quartile = ntile(desc(renda_per_capita), 4))
+```
+
+### Distribution
+
+```{r}
+
+renda_per_capita_summary <- ivs_clean |>
+  group_by(renda_per_capita_quartile) |>
+  summarise(
+    n = n(),
+    pct = round(100 * n() / nrow(ivs_clean), 1),
+    Median = median(renda_per_capita, na.rm = TRUE),
+    Min = min(renda_per_capita, na.rm = TRUE),
+    Max = max(renda_per_capita, na.rm = TRUE),
+    .groups = "drop") |>
+  mutate(
+    Variable = "Per-Capita Income",
+    Range = paste0(round(Min, 2), "-", round(Max, 2))) |>
+  rename(Quartile = renda_per_capita_quartile) |>
+  select(Variable, Quartile, n, pct, Median, Range)
+
+#kable
+renda_per_capita_summary |>
+  kable(
+    digits = 1,
+    caption = "Distribution of Municipalities by Per-Capita Income",
+    col.names = c(
+      "Per-Capita Income",
+      "Quartile",
+      "n",
+      "%",
+      "Median (%)",
+      "Range"
+    )
+  ) |>
+  collapse_rows(columns = 1) |>
+  kable_styling(full_width = FALSE)
+```
+
+### Plot
+
+```{r}
+ggplot(ivs_clean,
+       aes(x = factor(renda_per_capita_quartile),
+           y = renda_per_capita,
+           fill = factor(renda_per_capita_quartile))) +
+  geom_boxplot() +
+  labs(
+    title = "Per-Capita Income by Quartile",
+    x = "Quartile",
+    y = "Per-Capita Income",
+    fill = "Quartile"
+  ) +
+  theme_minimal()
+```
+
+### Normality
+
+```{r}
+ggplot(ivs_clean, aes(x = renda_per_capita)) +
+  geom_histogram(bins = 30) +
+  theme_minimal()
+```
+
+## Income Inequality - Gini Coefficient
+
+#### Create Quartiles
+
+```{r}
+ivs_clean <- ivs_clean |>
+  mutate(
+    i_gini_quartile = ntile(desc(i_gini), 4))
+```
+
+### Distribution
+
+```{r}
+
+i_gini_summary <- ivs_clean |>
+  group_by(i_gini_quartile) |>
+  summarise(
+    n = n(),
+    pct = round(100 * n() / nrow(ivs_clean), 1),
+    Median = median(i_gini, na.rm = TRUE),
+    Min = min(i_gini, na.rm = TRUE),
+    Max = max(i_gini, na.rm = TRUE),
+    .groups = "drop") |>
+  mutate(
+    Variable = "Gini Index",
+    Range = paste0(round(Min, 2), "-", round(Max, 2))) |>
+  rename(Quartile = i_gini_quartile) |>
+  select(Variable, Quartile, n, pct, Median, Range)
+
+#kable
+i_gini_summary |>
+  kable(
+    digits = 1,
+    caption = "Distribution of Municipalities by Gini Index",
+    col.names = c(
+      "Gini Index",
+      "Quartile",
+      "n",
+      "%",
+      "Median (%)",
+      "Range"
+    )
+  ) |>
+  collapse_rows(columns = 1) |>
+  kable_styling(full_width = FALSE)
+```
+
+### Plot
+
+```{r}
+ggplot(ivs_clean,
+       aes(x = factor(i_gini_quartile),
+           y = i_gini,
+           fill = factor(i_gini_quartile))) +
+  geom_boxplot() +
+  labs(
+    title = "Gini Index by Quartile",
+    x = "Quartile",
+    y = "Gini Index",
+    fill = "Quartile"
+  ) +
+  theme_minimal()
+```
+
+### Normality
+
+```{r}
+ggplot(ivs_clean, aes(x = i_gini)) +
+  geom_histogram(bins = 30) +
+  theme_minimal()
+```
+
+# Education
+
+## Adult Iliteracy Rate = \> 15 years
+
+#### Create Quartiles
+
+```{r}
+ivs_clean <- ivs_clean |>
+  mutate(
+    t_analf_15m_quartile = ntile(desc(t_analf_15m), 4))
+```
+
+### Distribution
+
+```{r}
+
+t_analf_15m_summary <- ivs_clean |>
+  group_by(t_analf_15m_quartile) |>
+  summarise(
+    n = n(),
+    pct = round(100 * n() / nrow(ivs_clean), 1),
+    Median = median(t_analf_15m, na.rm = TRUE),
+    Min = min(t_analf_15m, na.rm = TRUE),
+    Max = max(t_analf_15m, na.rm = TRUE),
+    .groups = "drop") |>
+  mutate(
+    Variable = "Adult Iliteracy Rate",
+    Range = paste0(round(Min, 2), "-", round(Max, 2))) |>
+  rename(Quartile = t_analf_15m_quartile) |>
+  select(Variable, Quartile, n, pct, Median, Range)
+
+#kable
+t_analf_15m_summary |>
+  kable(
+    digits = 1,
+    caption = "Distribution of Municipalities by Adult Iliteracy Rate",
+    col.names = c(
+      "Adult Iliteracy Ratee",
+      "Quartile",
+      "n",
+      "%",
+      "Median (%)",
+      "Range"
+    )
+  ) |>
+  collapse_rows(columns = 1) |>
+  kable_styling(full_width = FALSE)
+```
+
+### Plot
+
+```{r}
+ggplot(ivs_clean,
+       aes(x = factor(t_analf_15m_quartile),
+           y = t_analf_15m,
+           fill = factor(t_analf_15m_quartile))) +
+  geom_boxplot() +
+  labs(
+    title = "Adult Iliteracy Rate by Quartile",
+    x = "Quartile",
+    y = "Adult Iliteracy Rate",
+    fill = "Quartile"
+  ) +
+  theme_minimal()
+```
+
+### Normality
+
+```{r}
+ggplot(ivs_clean, aes(x = t_analf_15m)) +
+  geom_histogram(bins = 30) +
+  theme_minimal()
+```
+
+## Human Capital Sub-Index
+
+#### Create Quartiles
+
+```{r}
+ivs_clean <- ivs_clean |>
+  mutate(
+    ivs_capital_humano_quartile = ntile(desc(ivs_capital_humano), 4))
+```
+
+### Distribution
+
+```{r}
+
+ivs_capital_humano_summary <- ivs_clean |>
+  group_by(ivs_capital_humano_quartile) |>
+  summarise(
+    n = n(),
+    pct = round(100 * n() / nrow(ivs_clean), 1),
+    Median = median(ivs_capital_humano, na.rm = TRUE),
+    Min = min(ivs_capital_humano, na.rm = TRUE),
+    Max = max(ivs_capital_humano, na.rm = TRUE),
+    .groups = "drop") |>
+  mutate(
+    Variable = "Human Capital Sub-Index",
+    Range = paste0(round(Min, 2), "-", round(Max, 2))) |>
+  rename(Quartile = ivs_capital_humano_quartile) |>
+  select(Variable, Quartile, n, pct, Median, Range)
+
+#kable
+ivs_capital_humano_summary |>
+  kable(
+    digits = 1,
+    caption = "Distribution of Municipalities by Human Capital Sub-Index",
+    col.names = c(
+      "Human Capital Sub-Index",
+      "Quartile",
+      "n",
+      "%",
+      "Median (%)",
+      "Range"
+    )
+  ) |>
+  collapse_rows(columns = 1) |>
+  kable_styling(full_width = FALSE)
+```
+
+### Plot
+
+```{r}
+ggplot(ivs_clean,
+       aes(x = factor(ivs_capital_humano_quartile),
+           y = ivs_capital_humano,
+           fill = factor(ivs_capital_humano_quartile))) +
+  geom_boxplot() +
+  labs(
+    title = "Human Capital Sub-Index By Quartile",
+    x = "Quartile",
+    y = "Human Capital Sub-Index",
+    fill = "Quartile"
+  ) +
+  theme_minimal()
+```
+
+### Normality
+
+```{r}
+ggplot(ivs_clean, aes(x = ivs_capital_humano)) +
+  geom_histogram(bins = 30) +
+  theme_minimal()
+```
+
+# Sanitation & Environmental Exposure
+
+## Households without Piped Water or Sewage
+
+#### Create Quartiles
+
+```{r}
+ivs_clean <- ivs_clean |>
+  mutate(
+    t_sem_agua_esgoto_quartile = ntile(desc(t_sem_agua_esgoto), 4))
+```
+
+### Distribution
+
+```{r}
+
+t_sem_agua_esgoto_summary <- ivs_clean |>
+  group_by(t_sem_agua_esgoto_quartile) |>
+  summarise(
+    n = n(),
+    pct = round(100 * n() / nrow(ivs_clean), 1),
+    Median = median(t_sem_agua_esgoto, na.rm = TRUE),
+    Min = min(t_sem_agua_esgoto, na.rm = TRUE),
+    Max = max(t_sem_agua_esgoto, na.rm = TRUE),
+    .groups = "drop") |>
+  mutate(
+    Variable = "Households without Piped Water or Sewage",
+    Range = paste0(round(Min, 2), "-", round(Max, 2))) |>
+  rename(Quartile = t_sem_agua_esgoto_quartile) |>
+  select(Variable, Quartile, n, pct, Median, Range)
+
+#kable
+t_sem_agua_esgoto_summary |>
+  kable(
+    digits = 1,
+    caption = "Distribution of Municipalities by Households without Piped Water or Sewage",
+    col.names = c(
+      "Households without Piped Water or Sewage",
+      "Quartile",
+      "n",
+      "%",
+      "Median (%)",
+      "Range"
+    )
+  ) |>
+  collapse_rows(columns = 1) |>
+  kable_styling(full_width = FALSE)
+```
+
+### Plot
+
+```{r}
+ggplot(ivs_clean,
+       aes(x = factor(t_sem_agua_esgoto_quartile),
+           y = t_sem_agua_esgoto,
+           fill = factor(t_sem_agua_esgoto_quartile))) +
+  geom_boxplot() +
+  labs(
+    title = "Households without Piped Water or Sewage By Quartile",
+    x = "Quartile",
+    y = "Households without Piped Water or Sewage",
+    fill = "Quartile"
+  ) +
+  theme_minimal()
+```
+
+### Normality
+
+```{r}
+ggplot(ivs_clean, aes(x = t_sem_agua_esgoto)) +
+  geom_histogram(bins = 30) +
+  theme_minimal()
+```
+
+## Households without Garbage Collection
+
+#### Create Quartiles
+
+```{r}
+ivs_clean <- ivs_clean |>
+  mutate(
+    t_sem_lixo_quartile = ntile(desc(t_sem_lixo), 4))
+```
+
+### Distribution
+
+```{r}
+
+t_sem_lixo_summary <- ivs_clean |>
+  group_by(t_sem_lixo_quartile) |>
+  summarise(
+    n = n(),
+    pct = round(100 * n() / nrow(ivs_clean), 1),
+    Median = median(t_sem_lixo, na.rm = TRUE),
+    Min = min(t_sem_lixo, na.rm = TRUE),
+    Max = max(t_sem_lixo, na.rm = TRUE),
+    .groups = "drop") |>
+  mutate(
+    Variable = "Households without Garbage Collectio",
+    Range = paste0(round(Min, 2), "-", round(Max, 2))) |>
+  rename(Quartile = t_sem_lixo_quartile) |>
+  select(Variable, Quartile, n, pct, Median, Range)
+
+#kable
+t_sem_lixo_summary |>
+  kable(
+    digits = 1,
+    caption = "Distribution of Municipalities by Households without Garbage Collection",
+    col.names = c(
+      "Households without Garbage Collection",
+      "Quartile",
+      "n",
+      "%",
+      "Median (%)",
+      "Range"
+    )
+  ) |>
+  collapse_rows(columns = 1) |>
+  kable_styling(full_width = FALSE)
+```
+
+### Plot
+
+```{r}
+ggplot(ivs_clean,
+       aes(x = factor(t_sem_lixo_quartile),
+           y = t_sem_lixo,
+           fill = factor(t_sem_lixo_quartile))) +
+  geom_boxplot() +
+  labs(
+    title = "Households without Garbage Collection By Quartile",
+    x = "Quartile",
+    y = "Households without Garbage Collection",
+    fill = "Quartile"
+  ) +
+  theme_minimal()
+```
+
+### Normality
+
+```{r}
+ggplot(ivs_clean, aes(x = t_sem_lixo)) +
+  geom_histogram(bins = 30) +
+  theme_minimal()
 ```

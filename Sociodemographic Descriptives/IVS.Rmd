@@ -80,7 +80,7 @@ ivs_clean <- ivs_clean %>%
 plot_missing(ivs_clean)
 ```
 
-# Income & Employment 
+# Income & Employment
 
 ## Income and Labor Sub-Index
 
