@@ -678,11 +678,18 @@ ivs_clean &lt;- ivs_clean |&gt;
 <h1>Income &amp; Employment</h1>
 <div id="income-and-labor-sub-index" class="section level2">
 <h2>Income and Labor Sub-Index</h2>
+<div id="raw-frequency" class="section level3">
+<h3>Raw Frequency</h3>
+<pre class="r"><code>mean(ivs_clean$ivs_renda_e_trabalho)</code></pre>
+<pre><code>## [1] 0.2481721</code></pre>
+<pre class="r"><code>median(ivs_clean$ivs_renda_e_trabalho)</code></pre>
+<pre><code>## [1] 0.238</code></pre>
 <div id="create-quartiles" class="section level4">
 <h4>Create Quartiles</h4>
 <pre class="r"><code>ivs_clean &lt;- ivs_clean |&gt;
   mutate(
     ivs_renda_e_trabalho_quartile = ntile(desc(ivs_renda_e_trabalho), 4))</code></pre>
+</div>
 </div>
 <div id="distribution" class="section level3">
 <h3>Distribution</h3>
@@ -844,11 +851,18 @@ Income and Labor Sub-Index
 </div>
 <div id="per-capita-income" class="section level2">
 <h2>Per-Capita Income</h2>
+<div id="raw-frequencies" class="section level3">
+<h3>Raw Frequencies</h3>
+<pre class="r"><code>mean(ivs_clean$renda_per_capita)</code></pre>
+<pre><code>## [1] 713.9262</code></pre>
+<pre class="r"><code>median(ivs_clean$renda_per_capita)</code></pre>
+<pre><code>## [1] 686.89</code></pre>
 <div id="create-quartiles-1" class="section level4">
 <h4>Create Quartiles</h4>
 <pre class="r"><code>ivs_clean &lt;- ivs_clean |&gt;
   mutate(
     renda_per_capita_quartile = ntile(desc(renda_per_capita), 4))</code></pre>
+</div>
 </div>
 <div id="distribution-1" class="section level3">
 <h3>Distribution</h3>
@@ -1010,11 +1024,18 @@ Per-Capita Income
 </div>
 <div id="income-inequality---gini-coefficient" class="section level2">
 <h2>Income Inequality - Gini Coefficient</h2>
+<div id="raw-frequencies-1" class="section level3">
+<h3>Raw Frequencies</h3>
+<pre class="r"><code>mean(ivs_clean$i_gini)</code></pre>
+<pre><code>## [1] 0.4491938</code></pre>
+<pre class="r"><code>median(ivs_clean$i_gini)</code></pre>
+<pre><code>## [1] 0.45</code></pre>
 <div id="create-quartiles-2" class="section level4">
 <h4>Create Quartiles</h4>
 <pre class="r"><code>ivs_clean &lt;- ivs_clean |&gt;
   mutate(
     i_gini_quartile = ntile(desc(i_gini), 4))</code></pre>
+</div>
 </div>
 <div id="distribution-2" class="section level3">
 <h3>Distribution</h3>
@@ -1179,11 +1200,18 @@ Gini Index
 <h1>Education</h1>
 <div id="adult-iliteracy-rate-15-years" class="section level2">
 <h2>Adult Iliteracy Rate = &gt; 15 years</h2>
+<div id="raw-frequencies-2" class="section level3">
+<h3>Raw Frequencies</h3>
+<pre class="r"><code>mean(ivs_clean$t_analf_15m)</code></pre>
+<pre><code>## [1] 7.643349</code></pre>
+<pre class="r"><code>median(ivs_clean$t_analf_15m)</code></pre>
+<pre><code>## [1] 7.5</code></pre>
 <div id="create-quartiles-3" class="section level4">
 <h4>Create Quartiles</h4>
 <pre class="r"><code>ivs_clean &lt;- ivs_clean |&gt;
   mutate(
     t_analf_15m_quartile = ntile(desc(t_analf_15m), 4))</code></pre>
+</div>
 </div>
 <div id="distribution-3" class="section level3">
 <h3>Distribution</h3>
@@ -1345,11 +1373,18 @@ Adult Iliteracy Rate
 </div>
 <div id="human-capital-sub-index" class="section level2">
 <h2>Human Capital Sub-Index</h2>
+<div id="raw-frequencies-3" class="section level3">
+<h3>Raw Frequencies</h3>
+<pre class="r"><code>mean(ivs_clean$ivs_capital_humano)</code></pre>
+<pre><code>## [1] 0.2899891</code></pre>
+<pre class="r"><code>median(ivs_clean$ivs_capital_humano)</code></pre>
+<pre><code>## [1] 0.282</code></pre>
 <div id="create-quartiles-4" class="section level4">
 <h4>Create Quartiles</h4>
 <pre class="r"><code>ivs_clean &lt;- ivs_clean |&gt;
   mutate(
     ivs_capital_humano_quartile = ntile(desc(ivs_capital_humano), 4))</code></pre>
+</div>
 </div>
 <div id="distribution-4" class="section level3">
 <h3>Distribution</h3>
@@ -1514,11 +1549,18 @@ Human Capital Sub-Index
 <h1>Sanitation &amp; Environmental Exposure</h1>
 <div id="households-without-piped-water-or-sewage" class="section level2">
 <h2>Households without Piped Water or Sewage</h2>
+<div id="raw-frequencies-4" class="section level3">
+<h3>Raw Frequencies</h3>
+<pre class="r"><code>mean(ivs_clean$t_sem_agua_esgoto)</code></pre>
+<pre><code>## [1] 0.7709147</code></pre>
+<pre class="r"><code>median(ivs_clean$t_sem_agua_esgoto)</code></pre>
+<pre><code>## [1] 0.19</code></pre>
 <div id="create-quartiles-5" class="section level4">
 <h4>Create Quartiles</h4>
 <pre class="r"><code>ivs_clean &lt;- ivs_clean |&gt;
   mutate(
     t_sem_agua_esgoto_quartile = ntile(desc(t_sem_agua_esgoto), 4))</code></pre>
+</div>
 </div>
 <div id="distribution-5" class="section level3">
 <h3>Distribution</h3>
@@ -1681,11 +1723,18 @@ Households without Piped Water or Sewage
 </div>
 <div id="households-without-garbage-collection" class="section level2">
 <h2>Households without Garbage Collection</h2>
+<div id="raw-frequencies-5" class="section level3">
+<h3>Raw Frequencies</h3>
+<pre class="r"><code>mean(ivs_clean$t_sem_lixo)</code></pre>
+<pre><code>## [1] 0.4737364</code></pre>
+<pre class="r"><code>median(ivs_clean$t_sem_lixo)</code></pre>
+<pre><code>## [1] 0.24</code></pre>
 <div id="create-quartiles-6" class="section level4">
 <h4>Create Quartiles</h4>
 <pre class="r"><code>ivs_clean &lt;- ivs_clean |&gt;
   mutate(
     t_sem_lixo_quartile = ntile(desc(t_sem_lixo), 4))</code></pre>
+</div>
 </div>
 <div id="distribution-6" class="section level3">
 <h3>Distribution</h3>

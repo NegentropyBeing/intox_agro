@@ -1,6 +1,8 @@
 ---
 title: "IPVS"
-output: html_document
+output:
+  html_document: default
+  pdf_document: default
 date: "2026-06-11"
 ---
 
@@ -24,7 +26,7 @@ library(kableExtra)
 ##### Dataset
 
 ```{r}
-ipvs <- read_parquet("C:/Users/alyss/Documents/GitHub/intox_agro/resultados/contextual/ipvs_municipios_sp.parquet")
+ipvs <- read_parquet("~/GitHub/intox_agro/resultados/contextual/ipvs_municipios_sp.parquet")
 
 ```
 
@@ -48,7 +50,16 @@ ipvs <- ipvs |>
 
 ```
 
-## % Households with High Paulista Social Vulnerability Index 
+## % Households with High Paulista Social Vulnerability Index
+
+### Raw Frequency
+
+```{r}
+median(ipvs$ipvs_high)
+
+mean(ipvs$ipvs_high)
+
+```
 
 #### Create Quartiles
 

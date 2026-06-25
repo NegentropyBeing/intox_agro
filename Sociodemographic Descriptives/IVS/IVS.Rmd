@@ -26,7 +26,7 @@ library(kableExtra)
 ##### Dataset
 
 ```{r}
-ivs <- read_parquet("C:/Users/alyss/Documents/GitHub/intox_agro/resultados/contextual/ivs_municipios_sp_2010.parquet")
+ivs <- read_parquet("~/GitHub/intox_agro/resultados/contextual/ivs_municipios_sp_2010.parquet")
 ```
 
 ##### Cleaning
@@ -83,6 +83,14 @@ plot_missing(ivs_clean)
 # Income & Employment
 
 ## Income and Labor Sub-Index
+
+### Raw Frequency
+
+```{r}
+
+mean(ivs_clean$ivs_renda_e_trabalho)
+median(ivs_clean$ivs_renda_e_trabalho)
+```
 
 #### Create Quartiles
 
@@ -156,6 +164,13 @@ ggplot(ivs_clean, aes(x = ivs_renda_e_trabalho)) +
 
 ## Per-Capita Income
 
+### Raw Frequencies
+
+```{r}
+mean(ivs_clean$renda_per_capita)
+median(ivs_clean$renda_per_capita)
+```
+
 #### Create Quartiles
 
 ```{r}
@@ -227,6 +242,13 @@ ggplot(ivs_clean, aes(x = renda_per_capita)) +
 ```
 
 ## Income Inequality - Gini Coefficient
+
+### Raw Frequencies
+
+```{r}
+mean(ivs_clean$i_gini)
+median(ivs_clean$i_gini)
+```
 
 #### Create Quartiles
 
@@ -302,6 +324,13 @@ ggplot(ivs_clean, aes(x = i_gini)) +
 
 ## Adult Iliteracy Rate = \> 15 years
 
+### Raw Frequencies
+
+```{r}
+mean(ivs_clean$t_analf_15m)
+median(ivs_clean$t_analf_15m)
+```
+
 #### Create Quartiles
 
 ```{r}
@@ -373,6 +402,13 @@ ggplot(ivs_clean, aes(x = t_analf_15m)) +
 ```
 
 ## Human Capital Sub-Index
+
+### Raw Frequencies
+
+```{r}
+mean(ivs_clean$ivs_capital_humano)
+median(ivs_clean$ivs_capital_humano)
+```
 
 #### Create Quartiles
 
@@ -448,6 +484,13 @@ ggplot(ivs_clean, aes(x = ivs_capital_humano)) +
 
 ## Households without Piped Water or Sewage
 
+### Raw Frequencies
+
+```{r}
+mean(ivs_clean$t_sem_agua_esgoto)
+median(ivs_clean$t_sem_agua_esgoto)
+```
+
 #### Create Quartiles
 
 ```{r}
@@ -519,6 +562,13 @@ ggplot(ivs_clean, aes(x = t_sem_agua_esgoto)) +
 ```
 
 ## Households without Garbage Collection
+
+### Raw Frequencies
+
+```{r}
+mean(ivs_clean$t_sem_lixo)
+median(ivs_clean$t_sem_lixo)
+```
 
 #### Create Quartiles
 

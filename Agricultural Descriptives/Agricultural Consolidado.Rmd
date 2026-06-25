@@ -1,0 +1,164 @@
+---
+title: "Base - Agricultural Analysis"
+output: html_document
+date: "2026-06-25"
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+##### Packages
+
+```{r}
+library(readr)
+library(arrow)
+library(readxl)
+library(dplyr)
+library(ggplot2)
+library(tidyr)
+library(purrr)
+library(DataExplorer)
+library(knitr)
+library(kableExtra)
+```
+
+##### Dataset
+
+```{r}
+consolidada <- read_parquet("~/GitHub/intox_agro/resultados/base_consolidada_sp_2014_2024.parquet")
+```
+
+## Missing
+
+```{r}
+plot_missing(consolidada)
+
+
+```
+
+# Samples with at least one quantifiable pesticide detection
+
+## Raw Frequencies
+
+```{r}
+
+#table
+detect_summary <- consolidada %>%
+  group_by(ano) %>%
+  summarise(
+    mean_amostras = mean(sisagua_pct_deteccao, na.rm = TRUE),
+    median_amostras = median(sisagua_pct_deteccao, na.rm = TRUE),
+    .groups = "drop")
+
+detect_summary
+
+#plot
+detect_summary <- consolidada %>%
+  group_by(ano) %>%
+  summarise(
+    Mean = mean(sisagua_pct_deteccao, na.rm = TRUE),
+    Median = median(sisagua_pct_deteccao, na.rm = TRUE),
+    .groups = "drop"
+  ) %>%
+  pivot_longer(
+    cols = c(Mean, Median),
+    names_to = "Statistic",
+    values_to = "Value")
+
+ggplot(sisagua_summary,
+       aes(x = ano, y = Value, color = Statistic)) +
+  geom_line(linewidth = 1.2) +
+  geom_point(size = 3) +
+  labs(
+    title = "Mean and Median of % Samples with Quantifiable Detection by Year",
+    x = "Year",
+    y = "% of Detected Samples",
+    color = NULL
+  ) +
+  theme_minimal()
+```
+
+### Create Quartiles
+
+```{r}
+consolidada <- consolidada %>%
+  group_by(ano) %>%
+  mutate(
+    sisagua_pct_deteccao_quartile =
+      ntile(desc(sisagua_pct_deteccao), 4)
+  ) %>%
+  ungroup()
+```
+
+## Table
+
+```{r}
+
+detect_summary <- consolidada %>%
+  select(
+    ano,
+    sisagua_pct_deteccao,
+    sisagua_pct_deteccao_quartile
+  ) %>%
+  rename(
+    value = sisagua_pct_deteccao,
+    Quartile = sisagua_pct_deteccao_quartile
+  ) %>%
+  group_by(ano, Quartile) %>%
+  summarise(
+    n = n(),
+    Median = median(value, na.rm = TRUE),
+    Min = min(value, na.rm = TRUE),
+    Max = max(value, na.rm = TRUE),
+    .groups = "drop"
+  ) %>%
+  mutate(
+    Range = paste0(Min, "-", Max)
+  ) %>%
+  select(ano, Quartile, n, Median, Range)
+
+detect_summary
+
+#kable
+
+detect_summary %>%
+  arrange(ano, Quartile) %>%
+  kable(
+    digits = 2,
+    col.names = c(
+      "Year",
+      "Quartile",
+      "n",
+      "Median Rate",
+      "Range"
+    ),
+    caption = "% Detected Samples in Quartiles by Year"
+  ) %>%
+  collapse_rows(columns = 1) %>%
+  kable_styling(full_width = FALSE)
+```
+
+## Plot
+
+```{r}
+ggplot(consolidada,
+       aes(x = factor(sisagua_pct_deteccao_quartile),
+           y = sisagua_pct_deteccao,
+           fill = factor(sisagua_pct_deteccao_quartile))) +
+  geom_boxplot() +
+  labs(
+    title = "% Detected Samples by Quartile",
+    x = "Quartile",
+    y = "% Detected Samples",
+    fill = "Quartile"
+  ) +
+  theme_minimal()
+
+```
+
+## Normality
+
+```{r}
+
+```

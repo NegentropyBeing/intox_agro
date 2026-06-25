@@ -636,11 +636,18 @@ library(kableExtra)</code></pre>
 </div>
 <div id="households-with-high-paulista-social-vulnerability-index" class="section level2">
 <h2>% Households with High Paulista Social Vulnerability Index</h2>
+<div id="raw-frequency" class="section level3">
+<h3>Raw Frequency</h3>
+<pre class="r"><code>median(ipvs$ipvs_high)</code></pre>
+<pre><code>## [1] 13.67176</code></pre>
+<pre class="r"><code>mean(ipvs$ipvs_high)</code></pre>
+<pre><code>## [1] 17.79475</code></pre>
 <div id="create-quartiles" class="section level4">
 <h4>Create Quartiles</h4>
 <pre class="r"><code>ipvs &lt;- ipvs |&gt;
   mutate(
     ipvs_high_quartile = ntile(desc(ipvs_high), 4))</code></pre>
+</div>
 </div>
 <div id="table" class="section level3">
 <h3>Table</h3>
