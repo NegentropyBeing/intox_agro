@@ -204,10 +204,14 @@ Sections 9 and 10 require Steps 4 and 5, respectively.
 | `resultados/PROD_AGRO/pam_municipio_produto_ano.parquet` | municipality × crop × year | 2014–2024 |
 | `resultados/PROD_AGRO/censo_agro_municipio_2017.parquet` | municipality | 2017 |
 | `resultados/PROD_AGRO/censo_agro_lavoura_2017.parquet` | municipality × crop | 2017 |
-| `resultados/PROD_AGRO/censo_agro_agrotox_orientacao_2017.parquet` | municipality × guidance type | 2017 |
-| `resultados/PROD_AGRO/censo_agro_manejo_solo_2017.parquet` | municipality × farming typology | 2017 |
-| `resultados/PROD_AGRO/censo_agro_praticas_plantio_2017.parquet` | municipality × planting practice | 2017 |
+| `resultados/PROD_AGRO/censo_agro_agrotox_orientacao_2017.parquet` | municipality (wide) | 2017 |
+| `resultados/PROD_AGRO/censo_agro_manejo_solo_2017.parquet` | municipality (wide) | 2017 |
+| `resultados/PROD_AGRO/censo_agro_praticas_plantio_2017.parquet` | municipality (wide) | 2017 |
 | `resultados/CAGED/CAGED_YYYY_MM.parquet` | employment record (monthly) | 2014–2024 |
+
+> The four `censo_agro_*_2017` additional tables (temporary-crop production, pesticide
+> use × technical guidance, soil management, and planting practices) are documented
+> variable-by-variable in **Section 8 of `DATA_DICTIONARY.md`**.
 
 ### Contextual covariates (municipality-level)
 
