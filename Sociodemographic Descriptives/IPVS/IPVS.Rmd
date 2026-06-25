@@ -8,7 +8,7 @@ date: "2026-06-11"
 knitr::opts_chunk$set(echo = TRUE)
 ```
 
-## Packages
+##### Packages
 
 ```{r}
 library(arrow) 
@@ -21,14 +21,11 @@ library(knitr)
 library(kableExtra)
 ```
 
-## Dataset
+##### Dataset
 
 ```{r}
-<<<<<<<< HEAD:Sociodemographic Descriptives/IPVS.Rmd
 ipvs <- read_parquet("C:/Users/alyss/Documents/GitHub/intox_agro/resultados/contextual/ipvs_municipios_sp.parquet")
-========
-ipvs <- read_parquet("C:/Users/alyss/Desktop/Brasil/Analysis/dados_current - 2026-06-09/Dados/resultados/contextual/ipvs_municipios_sp.parquet")
->>>>>>>> f7a84ff72aefeb971b8c40967211a0513be32e62:rmd/IPVS.Rmd
+
 ```
 
 ### Missingness
@@ -37,7 +34,7 @@ ipvs <- read_parquet("C:/Users/alyss/Desktop/Brasil/Analysis/dados_current - 202
 sum(is.na(ipvs))
 ```
 
-## Clean
+#### Clean
 
 ```{r}
 ipvs <- ipvs |>
@@ -51,63 +48,73 @@ ipvs <- ipvs |>
 
 ```
 
-<<<<<<<< HEAD:Sociodemographic Descriptives/IPVS.Rmd
-# High IPVS
+## % Households with High Paulista Social Vulnerability Index 
 
-## Distribution
-========
-## Distribution of High IPVS
->>>>>>>> f7a84ff72aefeb971b8c40967211a0513be32e62:rmd/IPVS.Rmd
+#### Create Quartiles
 
 ```{r}
-ipvs_summary <- ipvs %>%
-  select(ipvs_high) %>%
-  rename(value = ipvs_high) %>%
+
+ipvs <- ipvs |>
   mutate(
-    Quartile = ntile(desc(value), 4)
-  ) %>%
-  group_by(Quartile) %>%
+    ipvs_high_quartile = ntile(desc(ipvs_high), 4))
+```
+
+### Table
+
+```{r}
+
+ipvs_summary <- ipvs |>
+  group_by(ipvs_high_quartile) |>
   summarise(
     n = n(),
     pct = round(100 * n() / nrow(ipvs), 1),
-    Median = median(value, na.rm = TRUE),
-    Min = min(value, na.rm = TRUE),
-    Max = max(value, na.rm = TRUE),
-    .groups = "drop"
-  ) %>%
+    Median = median(ipvs_high, na.rm = TRUE),
+    Min = min(ipvs_high, na.rm = TRUE),
+    Max = max(ipvs_high, na.rm = TRUE),
+    .groups = "drop") |>
   mutate(
-    Variable = "IPVS High",
-    Range = paste0(round(Min, 2), "-", round(Max, 2))
-  ) %>%
+    Variable = "% Households with High Paulista Social Vulnerability Index ",
+    Range = paste0(round(Min, 2), "-", round(Max, 2)) ) |>
+  rename(Quartile = ipvs_high_quartile) |>
   select(Variable, Quartile, n, pct, Median, Range)
 
-ipvs_summary
-```
-
-<<<<<<<< HEAD:Sociodemographic Descriptives/IPVS.Rmd
-========
-## Neat Table
-
->>>>>>>> f7a84ff72aefeb971b8c40967211a0513be32e62:rmd/IPVS.Rmd
-```{r}
-ipvs_summary %>%
+#kable
+ipvs_summary |>
   kable(
     digits = 1,
-    caption = "Distribution of Municipalities by High/Very High IPVS",
+    caption = "Distribution of Municipalities by % Households with High Paulista Social Vulnerability Index",
     col.names = c(
-      "High IPVS",
+      "% Households with High Paulista Social Vulnerability Index ",
       "Quartile",
       "n",
       "%",
       "Median (%)",
       "Range"
     )
-  ) %>%
-  collapse_rows(columns = 1) %>%
+  ) |>
+  collapse_rows(columns = 1) |>
   kable_styling(full_width = FALSE)
 ```
 
-## Normality
+### Plot
+
+```{r}
+
+ggplot(ipvs,
+       aes(x = factor(ipvs_high_quartile),
+           y = ipvs_high,
+           fill = factor(ipvs_high_quartile))) +
+  geom_boxplot() +
+  labs(
+    title = "% Households with High Paulista Social Vulnerability Index by Quartile",
+    x = "Quartile",
+    y = "% Households with High Paulista Social Vulnerability Index",
+    fill = "Quartile"
+  ) +
+  theme_minimal()
+```
+
+### Normality
 
 ```{r}
 ipvs_vars <- c("ipvs_low", "ipvs_medium", "ipvs_high")
