@@ -329,13 +329,107 @@ Variables follow the pattern `n_estab_<category>` (number of establishments) and
 
 ## 8. Censo Agropecuário 2017 — Additional Tables
 
-**Files:**
-- `resultados/PROD_AGRO/censo_agro_lavoura_2017.parquet` — municipality × temporary crop, variables: `num_estab`, `qtd_produzida`, `qtd_vendida`, `valor_prod_mil_reais`, `valor_venda_mil_reais`, `area_colhida_ha`
-- `resultados/PROD_AGRO/censo_agro_agrotox_orientacao_2017.parquet` — municipality × guidance type for pesticide use
-- `resultados/PROD_AGRO/censo_agro_manejo_solo_2017.parquet` — municipality × soil management practice
-- `resultados/PROD_AGRO/censo_agro_praticas_plantio_2017.parquet` — municipality × planting practice
+All four files are single 2017 cross-sections (use as fixed covariates) and are derived
+from the IBGE Censo Agropecuário 2017 (SIDRA). Join to other files with `cod_ibge`
+(6-digit IBGE code). Each file has 640 municipalities — the 5 missing rows are
+municipalities whose values were entirely suppressed for statistical confidentiality.
+Throughout, `NA` = category not applicable, zero, or suppressed.
 
-All fixed to 2017. Use `cod_ibge` to join with other files.
+> **Note on "lavoura temporária" (temporary crops):** annual/short-cycle crops harvested
+> within ~12 months (e.g. maize, soybean, sugarcane, beans, vegetables), as opposed to
+> permanent crops (e.g. coffee, citrus). This Census set covers temporary crops only.
+
+### 8.1 `censo_agro_lavoura_2017.parquet` — Temporary-crop production
+
+**Grain:** one row per municipality × crop. **Source:** SIDRA table 6957.
+Use `filter(produto == "Total")` for municipal totals across all temporary crops.
+
+| Variable | Type | Description |
+|---|---|---|
+| `cod_ibge` | string | 6-digit IBGE municipality code |
+| `nome_municipio` | string | Municipality name (with `(SP)` suffix) |
+| `produto` | string | Crop name; `"Total"` = sum across all temporary crops |
+| `num_estab` | double | Number of agricultural establishments growing that crop (count) |
+| `qtd_produzida` | double | Quantity produced — **units vary by crop** (tonnes, thousand fruits, thousand bunches…); consult SIDRA 6957 metadata |
+| `qtd_vendida` | double | Quantity sold (subset of produced); same unit as `qtd_produzida` |
+| `valor_prod_mil_reais` | double | Value of production (thousands BRL, 2017 prices) |
+| `valor_venda_mil_reais` | double | Value of sales (thousands BRL, 2017 prices) |
+| `area_colhida_ha` | double | Harvested area (hectares) |
+| `ano` | integer | Reference year (always 2017) |
+
+### 8.2 `censo_agro_agrotox_orientacao_2017.parquet` — Pesticide use × source of technical guidance
+
+**Grain:** one row per municipality. **Source:** SIDRA table 6852.
+Counts are **number of establishments**. Columns are named `<usegroup>_<guidance>`,
+i.e. the cross-tabulation of a pesticide-use group by the source of technical guidance
+received. `total_total` is the overall establishment count.
+
+**Pesticide-use groups** (column prefix):
+
+| Prefix | Meaning |
+|---|---|
+| `total` | All establishments |
+| `utilizou` | Used pesticides |
+| `nao_utilizou` | Did not use pesticides |
+| `nao_utilizou_nao_usa` | Did not use — does not use as a rule |
+| `nao_utilizou_nao_precisou` | Did not use — had no need |
+
+**Guidance source** (column suffix — establishments that received technical guidance from…):
+
+| Suffix | Meaning |
+|---|---|
+| `total` | Any/total (all guidance statuses) |
+| `recebe` | Receives technical guidance (any source) |
+| `governo` | Government extension service |
+| `propria` | Own/self (producer's own knowledge) |
+| `cooperativas` | Cooperatives |
+| `integradoras` | Integrator companies |
+| `empresas_privadas` | Private firms |
+| `ong` | NGOs |
+| `sistema_s` | "Sistema S" (SENAR/SEBRAE etc.) |
+| `outra` | Other source |
+| `nao_recebe` | Does not receive technical guidance |
+
+Plus `cod_ibge`, `nome_municipio`, `ano`.
+
+### 8.3 `censo_agro_manejo_solo_2017.parquet` — Soil management practices
+
+**Grain:** one row per municipality. **Source:** SIDRA table 6855
+(municipal totals across the family-farming typology breakdown).
+Counts are **number of establishments**, except `plantio_direto_ha`.
+
+| Variable | Type | Description |
+|---|---|---|
+| `cod_ibge` | string | 6-digit IBGE municipality code |
+| `nome_municipio` | string | Municipality name (with `(SP)` suffix) |
+| `nao_preparou_solo` | double | Establishments that did **not** prepare the soil (count) |
+| `preparou_solo` | double | Establishments that prepared the soil (count) |
+| `cultivo_convencional` | double | Establishments using conventional tillage (count) |
+| `cultivo_minimo` | double | Establishments using minimum tillage (count) |
+| `plantio_direto_n_estab` | double | Establishments using no-till / direct planting (count) |
+| `plantio_direto_ha` | double | Area under no-till / direct planting (hectares) |
+| `ano` | integer | Reference year (always 2017) |
+
+### 8.4 `censo_agro_praticas_plantio_2017.parquet` — Planting / conservation practices
+
+**Grain:** one row per municipality. **Source:** SIDRA table 6845.
+All values are **number of establishments** adopting each practice.
+
+| Variable | Type | Description |
+|---|---|---|
+| `cod_ibge` | string | 6-digit IBGE municipality code |
+| `nome_municipio` | string | Municipality name (with `(SP)` suffix) |
+| `plantio_nivel` | double | Contour planting (planting along level lines) |
+| `rotacao_culturas` | double | Crop rotation |
+| `pousio_descanso` | double | Fallow / land resting |
+| `protecao_encostas` | double | Slope/hillside protection |
+| `recuperacao_mata_ciliar` | double | Riparian-forest (riverbank) recovery |
+| `reflorestamento_nascentes` | double | Reforestation around springs/headwaters |
+| `estabilizacao_vocorocas` | double | Gully (voçoroca) stabilization |
+| `manejo_florestal` | double | Forest management |
+| `outra_pratica` | double | Other practice |
+| `nenhuma_pratica` | double | No conservation practice adopted |
+| `ano` | integer | Reference year (always 2017) |
 
 ---
 
