@@ -83,7 +83,7 @@ select(
 
 # 1. Age descriptive analysis
 
-```{r include=TRUE}
+```{r}
 pop_data <- pop_data %>% 
 mutate( 
 pct_0_14 = if_else( 
@@ -164,6 +164,31 @@ quartile_summary_by_year <- pop_data %>%
 
 head(quartile_summary_by_year) 
 
+```
+
+
+```{r}
+quartile_summary_by_year <- quartile_summary_by_year %>%
+  mutate(
+    Quartile = factor(Quartile, levels = c("Q1", "Q2", "Q3", "Q4")),
+    ano = as.numeric(ano)
+  )
+
+#plot 
+ggplot(quartile_summary_by_year,
+       aes(x = ano, y = Median, color = Quartile, group = Quartile)) +
+  geom_line(linewidth = 1) +
+  geom_point(size = 2) +
+  facet_wrap(~ variable, scales = "free_y") +
+  scale_y_log10() +
+  theme_minimal() +
+  labs(
+    title = "Median Population by Year and Quartile",
+    subtitle = "Log scale",
+    x = "Year",
+    y = "Median population, log scale",
+    color = "Quartile"
+  )
 ```
 
 # 3. Quartile by spliting the variable pop_0-14
@@ -247,7 +272,22 @@ head(child_quartile_summary)
 
 ```
 
+# Plot : Median trend over time
 
+```{r}
+ggplot(child_quartile_summary,
+       aes(x = ano, y = Median, color = Quartile, group = Quartile)) +
+  geom_line(linewidth = 1) +
+  geom_point(size = 2) +
+  facet_wrap(~ age_group, scales = "free_y") +
+  theme_minimal() +
+  labs(
+    title = "Median Child Population by Year and Quartile",
+    x = "Year",
+    y = "Median population",
+    color = "Quartile"
+  )
+```
 
 # 5.  Calculating mean, median and range for for population age group 0-14 by sex
 
