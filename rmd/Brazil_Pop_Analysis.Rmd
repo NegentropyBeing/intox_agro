@@ -11,15 +11,46 @@ output:
 knitr::opts_chunk$set(echo = TRUE)
 ```
 
-## R Markdown
+## R Markdown Notes
 
-This is an R Markdown document. Markdown is a simple formatting syntax for authoring HTML, PDF, and MS Word documents. For more details on using R Markdown see <http://rmarkdown.rstudio.com>.
+1. This is a .rmd document. 
+2. This is the analaysis of 2 datasets. 
+  a. ** File** - 'base_consolidada_sp_2014_2024.parquet'
+  
+  | # | Variable | Type | Description |
+|---|---|---|---|
+| 4 | `pop_total` | integer | Total estimated population |
+| 5 | `pop_masculino` | integer | Male population |
+| 6 | `pop_feminino` | integer | Female population |
+| 7 | `pop_0_14` | integer | Population aged 0–14 |
+| 8 | `pop_15_64` | integer | Population aged 15–64 |
+| 9 | `pop_65plus` | integer | Population aged 65 and older |
 
-When you click the **Knit** button a document will be generated that includes both content as well as the output of any embedded R code chunks within the document. You can embed an R code chunk like this:
+Source: `resultados/contextual/populacao_sp_municipio_ano.parquet`
 
+b. populacao_sp_municipio_ano.parquet 
+ 
+  | Variable | Type | Description |
+|---|---|---|
+| `cod_ibge` | string | 6-digit IBGE municipality code |
+| `ano` | integer | Reference year |
+| `sexo` | string | `"Masculino"` or `"Feminino"` |
+| `idade` | integer | Single year of age |
+| `populacao` | integer | Estimated population count |
 
+**Source:** IBGE intercensal population estimates via DATASUS
 
-```{r}
+3. The Descriptive analysis has the following: 
+  - Creating quartiles for the population variables and calculating mean, median, range and count. 
+  - The children's age is diveded in 0-3, 4-7,8-10 and 10-14.
+  -Then quartiles were created for each age group grouped by year and calculated mean, median, range and count. 
+  - Calculating mean, median and range for for population age group 0-14 by sex 
+  - Proportion of Child Population by Age Group Over Time
+  -  Percent change in proportion
+  -Plots for propotion variation year wise and sex wise. 
+  
+
+```{r include=FALSE}
 library(dplyr)
 library(tidyr)
 library(knitr)
@@ -30,9 +61,8 @@ library(scales)
 library(tidyverse)
 library(stringr)
 library(ggh4x)
+library(tidyverse)
 
-## I'm testing my github desktop
-## Published my branch - testing further pushes from local to remote
 ```
 
 Load data
@@ -52,9 +82,6 @@ select(
 ```
 
 # 1. Age descriptive analysis
-
-This section examines the distribution of the population by age across the study period(2014-2024). Descriptive summaries are used to understand the general age structure of the population, including the concentration of individuals in younger, working-age, and older age groups.
-The analysis helps identify whether the population is relatively young, aging, or evenly distributed across age groups. Age patterns are important for understanding demographic dependency, labor force structure, and potential future service needs such as education, employment, and healthcare.
 
 ```{r include=TRUE}
 pop_data <- pop_data %>% 
@@ -78,17 +105,16 @@ NA_real_
 head(pop_data)
 ```
 
-# 2. Descriptive Statistics of Raw Counts
+# 2. Descriptive Statistics of Raw Counts - Quartiles grouped by year
 
 This section summarizes the raw population counts using standard descriptive statistics. These include measures such as:
 
+Quartiles
 Mean population count  
 Median population count  
 Minimum and maximum values  
 Range  
-Quartiles
 
-The purpose is to describe the overall size and variation of the population counts across years, age groups, and sex categories. This provides a baseline understanding of how population totals differ before applying transformations or grouping methods.
 
 ```{r}
 pop_vars <- c( 
@@ -97,394 +123,345 @@ pop_vars <- c(
   "pop_feminino",
   "pop_0_14",
   "pop_15_64",
-  "pop_65plus"
-)
+  "pop_65plus" )
 
-quartile_data <- pop_data %>%
-  group_by(ano) %>%
-  mutate(
-    across(
-      all_of(pop_vars),
-      ~ ntile(., 4),
-      .names = "{.col}_quartile"
-    )
-  ) %>%
-  ungroup()
-```
-# Notes
-## The data is split by ano.
-## Within each year, municipalities are ranked by pop_total.
-## They are divided into 4 groups of roughly equal size.
-## A new column called pop_total_quartile is created.
-
-# 3. Obtaining Quartile cuttoffs: 
-
-Quartile cutoffs are calculated to divide the population counts into four equal groups based on their distribution. These quartiles are typically defined as:
-
-Q1: 25th percentile  
-Q2: 50th percentile, also the median  
-Q3: 75th percentile
-
-These cutoff points are used to classify population observations into lower, middle, and higher population groups. Quartile classification allows comparison between areas or groups with relatively small, moderate, and large population counts.
-
-```{r}
-quartile_cutoffs <- map_df(pop_vars, function(var){
-
-  pop_data %>%
-    group_by(ano) %>%
-    summarise(
-      Q1 = quantile(.data[[var]], 0.25, na.rm = TRUE),
-      Q2 = quantile(.data[[var]], 0.50, na.rm = TRUE), #MEDIAN
-      Q3 = quantile(.data[[var]], 0.75, na.rm = TRUE),
-      .groups = "drop"
-    ) %>%
-    mutate(Variable = var)
-
-})
-
-quartile_cutoffs
-```
-
-# Notes 
-## Looping over each variable in pop_vars
-## Grouping the data by year using group_by(ano)
-## Calculating the 25th, 50th, and 75th percentiles for that variable in each year
-## Adding the variable name to the results
-## Combining all variable-specific results into one table
-
-# 4.Absolute and relative frequencies
-
-This section presents both absolute and relative frequencies for key categorical variables such as year, age group, sex, and quartile group.
-
-Absolute frequency refers to the actual count of observations in each category.
-Relative frequency refers to the percentage or proportion of observations in each category.
-
-This analysis helps show how the data are distributed across different categories and allows comparison between groups of different sizes.
-
-```{r}
-quartile_freq <- map_df(pop_vars, function(var){
-
-  qvar <- paste0(var, "_quartile")
-
-  quartile_data %>%
-    filter(!is.na(.data[[qvar]])) %>%
-    count(ano, Quartile = .data[[qvar]]) %>%
-    group_by(ano) %>%
-    mutate(
-      Absolute_Frequency = n,
-      Relative_Frequency = n / sum(n),
-      Relative_Percent = Relative_Frequency * 100
-    ) %>%
-    ungroup() %>%
-    mutate(Variable = var)
-
-})
-
-quartile_freq
-
-```
-
-# Notes 
-## This code loops over each population variable, identifies its corresponding quartile column, removes missing quartile values, counts how many municipalities fall in each quartile by year, calculates the relative frequency and percentage of each quartile within each year, and adds the variable name. The final table shows the distribution of municipalities across quartiles for every variable and year.
-
-# 5. Median and Range
-
-The median and range are used to summarize the central tendency and spread of population counts.
-
-The median represents the middle value of the population distribution and is less affected by extreme values than the mean.
-The range shows the difference between the maximum and minimum population counts.
-
-Together, these measures provide a simple but useful description of population variability across years, age groups, and sex categories.
-```{r}
-summary_stats <- map_df(pop_vars, function(var){
-
-  pop_data %>%
-    group_by(ano) %>%
-    summarise(
-      Median = median(.data[[var]], na.rm = TRUE),
-      Minimum = min(.data[[var]], na.rm = TRUE),
-      Maximum = max(.data[[var]], na.rm = TRUE),
-      Range = Maximum - Minimum,
-      .groups = "drop"
-    ) %>%
-    mutate(Variable = var)
-
-})
-head(summary_stats)
-```
-
-#6. Missingness by year
-
-This section assesses missing data patterns across the years 2014 to 2024. The number and percentage of missing values are calculated for each year to determine whether data completeness varies over time.
-
-```{r}
-missingness <- map_df(pop_vars, function(var){
-
-  pop_data %>%
-    group_by(ano) %>%
-    summarise(
-      Missing_Count = sum(is.na(.data[[var]])),
-      Total = n(),
-      Missing_Percent = Missing_Count / Total * 100,
-      .groups = "drop"
-    ) %>%
-    mutate(Variable = var)
-
-})
-
-missingness
-```
-
-# 7. Quartile distribution Visualisation
-
-
-```{r}
-quartile_cutoffs_long <- quartile_cutoffs %>%
-  pivot_longer(
-    cols = c(Q1, Q2, Q3),
-    names_to = "Cutoff",
-    values_to = "Value"
-  )
-
-ggplot(quartile_cutoffs_long,
-       aes(x = ano,
-           y = Value,
-           color = Cutoff,
-           group = Cutoff)) +
-  geom_line(linewidth = 1) +
-  geom_point(size = 2) +
-  facet_wrap(~Variable, scales = "free_y") +
-  scale_y_log10() +
-  labs(
-    title = "Population Quartile Cutoff Values from 2014-2024 in the State of São Paulo ,Brazil",
-    x = "Year",
-    y = "Population cutoff value(log scale)",
-    color = "Quartile cutoff"
-  ) +
-  theme_minimal()
-```
-
-
-# 8. Median Population Visualisation for Population variables from 2014 - 2024 ,San Paulo, Brazil
-```{r}
-median_pop_long <- pop_data %>%
-  group_by(ano) %>%
-  summarise(
-    across(all_of(pop_vars), ~ median(.x, na.rm = TRUE)),
-    .groups = "drop"
-  ) %>%
+quartile_summary_by_year <- pop_data %>%
   pivot_longer(
     cols = all_of(pop_vars),
-    names_to = "Variable",
-    values_to = "Median_Population"
-  )
+    names_to = "variable",
+    values_to = "value"
+  ) %>%
+  filter(!is.na(value)) %>%
+  group_by(ano, variable) %>%
+  mutate(
+    Quartile = paste0("Q", ntile(value, 4))
+  ) %>%
+  group_by(ano, variable, Quartile) %>%
+  summarise(
+    n = n(),
+    Mean = mean(value, na.rm = TRUE),
+    Median = median(value, na.rm = TRUE),
+    Min = min(value, na.rm = TRUE),
+    Max = max(value, na.rm = TRUE),
+    .groups = "drop_last"
+  ) %>%
+  mutate(
+    `%` = round(100 * n / sum(n), 2),
+    Range = paste0(Min, " - ", Max)
+  ) %>%
+  ungroup() %>%
+  select(
+    ano,
+    variable,
+    Quartile,
+    n,
+    `%`,
+    Mean,
+    Median,
+    Range
+  ) %>%
+  arrange(ano, variable, Quartile)
 
-ggplot(median_pop_long,
-       aes(x = ano, y = Median_Population)) +
-  geom_line(color = "steelblue", linewidth = 1) +
-  geom_point(color = "steelblue") +
-  facet_wrap(~Variable, scales = "free_y") +
-  scale_y_log10(labels = comma) +
+head(quartile_summary_by_year) 
+
+```
+
+# 3. Quartile by spliting the variable pop_0-14
+
+This section summarizes the raw population counts for childeren of age 0-14  using standard descriptive statistics. These include measures such as:
+
+Quartiles
+Mean population count  
+Median population count  
+Minimum and maximum values  
+Range  
+
+
+```{r}
+child_data <- read_parquet(
+  "/Users/abiramisomasundaram/Desktop/Brazil pesticides/Data/Dados Version 2/Dados/resultados/contextual/populacao_sp_municipio_ano.parquet"
+)
+
+child_age_quartiles <- child_data %>%
+  filter(idade >= 0, idade <= 14) %>%
+  mutate(
+    age_group = case_when(
+      idade >= 0  & idade <= 3  ~ "0-3",
+      idade >= 4  & idade <= 7  ~ "4-7",
+      idade >= 8  & idade <= 10 ~ "8-10",
+      idade >= 11 & idade <= 14 ~ "11-14",
+      TRUE ~ NA_character_
+    )
+  ) %>%
+  filter(!is.na(age_group)) %>%
+  group_by(ano, cod_ibge, age_group) %>%
+  summarise(
+    population = sum(populacao, na.rm = TRUE),
+    .groups = "drop"
+  ) %>%
+  group_by(ano, age_group) %>%
+  mutate(
+    Quartile = paste0("Q", ntile(population, 4))
+  ) %>%
+  ungroup()
+
+head(child_age_quartiles)
+  
+```
+
+
+# 4. Calculating mean, median and range for for population age group 0-14 by year
+
+
+```{r}
+
+child_quartile_summary <- child_age_quartiles %>%
+  group_by(ano, age_group, Quartile) %>%
+  summarise(
+    n = n(),
+    Mean = mean(population, na.rm = TRUE),
+    Median = median(population, na.rm = TRUE),
+    Min = min(population, na.rm = TRUE),
+    Max = max(population, na.rm = TRUE),
+    .groups = "drop_last"
+  ) %>%
+  mutate(
+    percent = round(100 * n / sum(n), 2),
+    Range = paste0(Min, " - ", Max)
+  ) %>%
+  ungroup() %>%
+  select(
+    ano,
+    age_group,
+    Quartile,
+    n,
+    percent,
+    Mean,
+    Median,
+    Range
+  ) %>%
+  arrange(ano, age_group, Quartile)
+
+head(child_quartile_summary)
+
+
+```
+
+
+
+# 5.  Calculating mean, median and range for for population age group 0-14 by sex
+
+```{r}
+child_age_quartiles_sex <- child_data %>%
+  filter(idade >= 0, idade <= 14) %>%
+  mutate(
+    age_group = case_when(
+      idade >= 0  & idade <= 3  ~ "0-3",
+      idade >= 4  & idade <= 7  ~ "4-7",
+      idade >= 8  & idade <= 10 ~ "8-10",
+      idade >= 11 & idade <= 14 ~ "11-14",
+      TRUE ~ NA_character_
+    )
+  ) %>%
+  filter(!is.na(age_group)) %>%
+  group_by(ano, cod_ibge, sexo, age_group) %>%
+  summarise(
+    population = sum(populacao, na.rm = TRUE),
+    .groups = "drop"
+  ) %>%
+  group_by(ano, sexo, age_group) %>%
+  mutate(
+    Quartile = paste0("Q", ntile(population, 4))
+  ) %>%
+  ungroup()
+
+child_quartile_summary_sex <- child_age_quartiles_sex %>%
+  group_by(ano, sexo, age_group, Quartile) %>%
+  summarise(
+    n = n(),
+    Mean = mean(population, na.rm = TRUE),
+    Median = median(population, na.rm = TRUE),
+    Min = min(population, na.rm = TRUE),
+    Max = max(population, na.rm = TRUE),
+    .groups = "drop_last"
+  ) %>%
+  mutate(
+    percent = round(100 * n / sum(n), 2),
+    Range = paste0(Min, " - ", Max)
+  ) %>%
+  ungroup() %>%
+  arrange(ano, sexo, age_group, Quartile)
+
+head(child_quartile_summary_sex)
+
+```
+
+#6. Create age groups and calculation of  yearly proportions(%)
+
+```{r}
+child_age_yearly <- child_data %>%
+  filter(idade >= 0, idade <= 14) %>%
+  mutate(
+    age_group = case_when(
+      idade >= 0  & idade <= 3  ~ "0-3",
+      idade >= 4  & idade <= 7  ~ "4-7",
+      idade >= 8  & idade <= 10 ~ "8-10",
+      idade >= 11 & idade <= 14 ~ "11-14",
+      TRUE ~ NA_character_
+    )
+  ) %>%
+  filter(!is.na(age_group)) %>%
+  group_by(ano, age_group) %>%
+  summarise(
+    total_population = sum(populacao, na.rm = TRUE),
+    .groups = "drop"
+  ) %>%
+  group_by(ano) %>%
+  mutate(
+    total_child_population = sum(total_population, na.rm = TRUE),
+    proportion = total_population / total_child_population,
+    proportion_percent = 100 * proportion
+  ) %>%
+  ungroup() %>%
+  arrange(age_group, ano)
+
+head(child_age_yearly)
+
+```
+
+# 7. Percent change in proportion
+
+```{r}
+
+child_age_variation <- child_age_yearly %>%
+  group_by(age_group) %>%
+  arrange(ano, .by_group = TRUE) %>%
+  mutate(
+    previous_proportion_percent = lag(proportion_percent),
+    
+    percentage_point_change = proportion_percent - previous_proportion_percent,
+    
+    percent_change_in_proportion = 100 * 
+      (proportion_percent - previous_proportion_percent) / previous_proportion_percent
+  ) %>%
+  ungroup()
+
+head(child_age_variation)
+```
+
+
+# 8. Proportion of Child Population by Age Group Over Time
+This shows the percentage share of each age group each year.
+```{r}
+ggplot(
+  child_age_variation,
+  aes(
+    x = ano,
+    y = proportion_percent,
+    color = age_group,
+    group = age_group
+  )
+) +
+  geom_line(linewidth = 1) +
+  geom_point(size = 2) +
   labs(
-    title = "Median Population by Population Variables from 2014–2024 for São Paulo, Brazil",
+    title = "Proportion of Child Population by Age Group Over Time",
     x = "Year",
-    y = "Median population (log scale)"
+    y = "Percentage of population age 0-14",
+    color = "Age group"
   ) +
   theme_minimal()
 ```
 
+#8. Proportional variation year-wise
 
-# 9. Age Composition Visualisation
 ```{r}
-age_population_long <- pop_data %>%
-  group_by(ano) %>%
-  summarise(
-    pop_0_14 = sum(pop_0_14, na.rm = TRUE),
-    pop_15_64 = sum(pop_15_64, na.rm = TRUE),
-    pop_65plus = sum(pop_65plus, na.rm = TRUE),
-    .groups = "drop"
-  ) %>%
-  pivot_longer(
-    cols = c(pop_0_14, pop_15_64, pop_65plus),
-    names_to = "Age_Group",
-    values_to = "Population"
-  ) %>%
-  mutate(
-    Age_Group = recode(
-      Age_Group,
-      "pop_0_14" = "Ages 0–14",
-      "pop_15_64" = "Ages 15–64",
-      "pop_65plus" = "Ages 65+"
-    )
+ggplot(
+  child_age_variation,
+  aes(
+    x = ano,
+    y = percentage_point_change,
+    color = age_group,
+    group = age_group
   )
-
-ggplot(age_population_long,
-       aes(x = ano,
-           y = Population,
-           color = Age_Group,
-           group = Age_Group)) +
-  geom_line(linewidth = 1.2) +
+) +
+  geom_hline(yintercept = 0, linetype = "dashed", color = "gray50") +
+  geom_line(linewidth = 1) +
   geom_point(size = 2) +
-  scale_y_log10() +
   labs(
-    title = "Age Population 2014-2024 (log scale)",
+    title = "Year-wise Change in Population Proportion by Age Group",
     x = "Year",
-    y = "Population (log scale)",
+    y = "Percentage point change from previous year",
     color = "Age group"
   ) +
   theme_minimal()
 ```
 
 
-# 10.Population Pyramids
-
 ```{r}
-pop_pyramid <- read_parquet("/Users/abiramisomasundaram/Desktop/Brazil pesticides/Data/Dados Version 2/Dados/resultados/contextual/populacao_sp_municipio_ano.parquet")
-
-glimpse(pop_pyramid)
-
-
-```
-
-
-```{r}
-pop_age_grouped <- pop_pyramid %>%
-  filter(ano >= 2014, ano <= 2024) %>%
+child_age_yearly_sex <- child_data %>%
+  filter(idade >= 0, idade <= 14) %>%
   mutate(
-    age_original = as.character(idade),
-    age_num = parse_number(age_original),
-    
     age_group = case_when(
-      age_num >= 0  & age_num <= 14 ~ "0-14",
-      age_num >= 15 & age_num <= 49 ~ "15-49",
-      age_num >= 50 & age_num <= 64 ~ "50-64",
-      age_num >= 65                 ~ "65+",
+      idade >= 0  & idade <= 3  ~ "0-3",
+      idade >= 4  & idade <= 7  ~ "4-7",
+      idade >= 8  & idade <= 10 ~ "8-10",
+      idade >= 11 & idade <= 14 ~ "11-14",
       TRUE ~ NA_character_
-    ),
-    
-    age_group = factor(
-      age_group,
-      levels = c("0-14", "15-49", "50-64", "65+")
     )
   ) %>%
-  filter(!is.na(age_group))
-```
-
-# 11. Creating Quantiles by using mean population
-```{r}
-n_quantiles <- 5
-
-municipality_quantiles_avg <- pop_age_grouped %>%
-  group_by(cod_ibge, ano) %>%
+  filter(!is.na(age_group)) %>%
+  group_by(ano, sexo, age_group) %>%
   summarise(
-    total_population_year = sum(populacao, na.rm = TRUE),
+    total_population = sum(populacao, na.rm = TRUE),
     .groups = "drop"
   ) %>%
-  group_by(cod_ibge) %>%
-  summarise(
-    avg_population_2014_2024 = mean(total_population_year, na.rm = TRUE),
-    .groups = "drop"
-  ) %>%
+  group_by(ano, sexo) %>%
   mutate(
-    pop_quantile_num = ntile(avg_population_2014_2024, n_quantiles),
-    pop_quantile = paste0("Q", pop_quantile_num)
-  )
-
-```
-
-# 12. Join the quantiles back to population data
-```{r}
-pop_q <- pop_age_grouped %>%
-  left_join(
-    municipality_quantiles_avg %>%
-      select(cod_ibge, pop_quantile, pop_quantile_num),
-    by = "cod_ibge"
-  )
-
-```
-
-# 13. Aggregate by quantile, year, age sex and group
-
-```{r}
-
-pop_summary <- pop_q %>%
-  group_by(pop_quantile, pop_quantile_num, ano, age_group, sexo) %>%
-  summarise(
-    population = sum(populacao, na.rm = TRUE),
-    .groups = "drop"
+    total_child_population = sum(total_population, na.rm = TRUE),
+    proportion_percent = 100 * total_population / total_child_population
   ) %>%
+  ungroup() %>%
+  arrange(sexo, age_group, ano)
+
+child_age_variation_sex <- child_age_yearly_sex %>%
+  group_by(sexo, age_group) %>%
+  arrange(ano, .by_group = TRUE) %>%
   mutate(
-    sexo = case_when(
-      tolower(sexo) %in% c("male", "m", "masculino", "homem") ~ "Male",
-      tolower(sexo) %in% c("female", "f", "feminino", "mulher") ~ "Female",
-      TRUE ~ as.character(sexo)
-    ),
-    ano = factor(ano, levels = 2014:2024),
-    age_group = factor(
-      age_group,
-      levels = c("0-14", "15-49", "50-64", "65+")
-    ),
-    population_pyramid = if_else(
-      sexo == "Male",
-      -abs(population),
-      abs(population)
-    )
-  )
+    previous_proportion_percent = lag(proportion_percent),
+    percentage_point_change = proportion_percent - previous_proportion_percent,
+    percent_change_in_proportion = 100 *
+      (proportion_percent - previous_proportion_percent) / previous_proportion_percent
+  ) %>%
+  ungroup()
 
-```
-
-# 14. Plotting population pyramids(raw count) between male and female for each quantile from 2014 -2024
-```{r}
+#Plot 
 ggplot(
-  pop_summary,
+  child_age_variation_sex,
   aes(
-    x = population_pyramid,
-    y = ano,
-    fill = sexo
+    x = ano,
+    y = percentage_point_change,
+    color = age_group,
+    group = age_group
   )
 ) +
-  geom_col(width = 0.7) +
-  ggh4x::facet_grid2(
-    age_group ~ pop_quantile,
-    scales = "free_x",
-    axes = "all",
-    remove_labels = "none",
-    drop = FALSE
-  ) +
-  geom_vline(
-    xintercept = 0,
-    color = "gray30",
-    linewidth = 0.4
-  ) +
-  scale_x_continuous(
-    labels = function(x) comma(abs(x))
-  ) +
-  scale_fill_manual(
-    values = c(
-      "Male" = "#377EB8",
-      "Female" = "#E41A1C"
-    )
-  ) +
+  geom_hline(yintercept = 0, linetype = "dashed", color = "gray50") +
+  geom_line(linewidth = 1) +
+  geom_point(size = 2) +
+  facet_wrap(~ sexo) +
   labs(
-    title = "Population Pyramid Trends by Age Group and Municipality Quantile",
-    subtitle = "Male population shown on the left; female population shown on the right",
-    x = "Population",
-    y = "Year",
-    fill = "Sex"
+    title = "Year-wise Change in Child Population Proportion by Age Group and Sex",
+    x = "Year",
+    y = "Percentage point change from previous year",
+    color = "Age group"
   ) +
-  theme_minimal(base_size = 13) +
-  theme(
-    legend.position = "bottom",
-    strip.text = element_text(face = "bold"),
-    panel.grid.major.y = element_blank(),
-    panel.border = element_rect(color = "gray40", fill = NA, linewidth = 0.5),
-    axis.line = element_line(color = "gray30"),
-    axis.ticks = element_line(color = "gray30"),
-    
-    # Helps if year labels are crowded
-    axis.text.y = element_text(size = 4),
-    axis.text.x = element_text(size = 4)
-  )
+  theme_minimal()
 ```
+
+
+
+
+
+
 
 
