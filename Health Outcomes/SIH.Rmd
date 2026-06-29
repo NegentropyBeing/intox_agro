@@ -62,7 +62,15 @@ consolidada <- read_parquet("~/GitHub/intox_agro/resultados/base_consolidada_sp_
 plot_missing(consolidada[, c("taxa_hosp_100k")])
 ```
 
-## Create Quartiles
+### Raw Frequency
+
+```{r}
+median(consolidada$taxa_hosp_100k)
+
+mean(consolidada$taxa_hosp_100k)
+```
+
+#### Create Quartiles
 
 ```{r}
 consolidada <- consolidada %>%
@@ -150,14 +158,24 @@ ggplot(consolidada, aes(x = taxa_hosp_100k)) +
 ```{r}
 
 consolidada <- consolidada %>%
-  mutate(sih_cfr = (sih_n_obitos_hosp / sih_n_hosp) * 100)
-
+  mutate(
+    sih_cfr = if_else(sih_n_hosp > 0,
+                      (sih_n_obitos_hosp / sih_n_hosp) * 100,
+                      NA_real_))
 ```
 
-### Missing
+#### Missing
 
 ```{r}
 plot_missing(consolidada[, c("sih_cfr")])
+```
+
+### Raw Frequency
+
+```{r}
+median(consolidada$sih_cfr, na.rm = TRUE)
+
+mean(consolidada$sih_cfr, na.rm = TRUE)
 ```
 
 #### Create Quartiles

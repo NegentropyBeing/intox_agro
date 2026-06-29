@@ -34,7 +34,6 @@ consolidada <- read_parquet("~/GitHub/intox_agro/resultados/base_consolidada_sp_
 ```{r}
 plot_missing(consolidada)
 
-
 ```
 
 # Samples with at least one quantifiable pesticide detection
@@ -44,17 +43,17 @@ plot_missing(consolidada)
 ```{r}
 
 #table
-detect_summary <- consolidada %>%
+detect_raw_summary <- consolidada %>%
   group_by(ano) %>%
   summarise(
     mean_amostras = mean(sisagua_pct_deteccao, na.rm = TRUE),
     median_amostras = median(sisagua_pct_deteccao, na.rm = TRUE),
     .groups = "drop")
 
-detect_summary
+detect_raw_summary
 
 #plot
-detect_summary <- consolidada %>%
+detect_raw_plot <- consolidada %>%
   group_by(ano) %>%
   summarise(
     Mean = mean(sisagua_pct_deteccao, na.rm = TRUE),
@@ -66,7 +65,7 @@ detect_summary <- consolidada %>%
     names_to = "Statistic",
     values_to = "Value")
 
-ggplot(sisagua_summary,
+ggplot(detect_raw_plot,
        aes(x = ano, y = Value, color = Statistic)) +
   geom_line(linewidth = 1.2) +
   geom_point(size = 3) +
@@ -142,16 +141,19 @@ detect_summary %>%
 ## Plot
 
 ```{r}
-ggplot(consolidada,
-       aes(x = factor(sisagua_pct_deteccao_quartile),
-           y = sisagua_pct_deteccao,
-           fill = factor(sisagua_pct_deteccao_quartile))) +
-  geom_boxplot() +
+
+ggplot(detect_summary,
+       aes(x = ano,
+           y = Median,
+           color = factor(Quartile),
+           group = Quartile)) +
+  geom_line(linewidth = 1) +
+  geom_point(size = 2) +
   labs(
-    title = "% Detected Samples by Quartile",
-    x = "Quartile",
-    y = "% Detected Samples",
-    fill = "Quartile"
+    title = "Median % Detected Samples by Quartile and Year",
+    x = "Year",
+    y = "Median % Detected Samples",
+    color = "Quartile"
   ) +
   theme_minimal()
 
@@ -160,5 +162,388 @@ ggplot(consolidada,
 ## Normality
 
 ```{r}
+ggplot(consolidada, aes(x = sisagua_pct_deteccao)) +
+  geom_histogram(bins = 30) +
+  theme_minimal()
+```
 
+# Number of distinct pesticide compounds detected in quantifiable amounts
+
+## Raw Frequencies
+
+```{r}
+#table
+distinct_raw_summary <- consolidada %>%
+  group_by(ano) %>%
+  summarise(
+    mean_amostras = mean(sisagua_n_pesticidas_detect, na.rm = TRUE),
+    median_amostras = median(sisagua_n_pesticidas_detect, na.rm = TRUE),
+    .groups = "drop")
+
+distinct_raw_summary
+
+#plot
+distinct_plot <- consolidada %>%
+  group_by(ano) %>%
+  summarise(
+    Mean = mean(sisagua_n_pesticidas_detect, na.rm = TRUE),
+    Median = median(sisagua_n_pesticidas_detect, na.rm = TRUE),
+    .groups = "drop"
+  ) %>%
+  pivot_longer(
+    cols = c(Mean, Median),
+    names_to = "Statistic",
+    values_to = "Value")
+
+ggplot(distinct_plot,
+       aes(x = ano, y = Value, color = Statistic)) +
+  geom_line(linewidth = 1.2) +
+  geom_point(size = 3) +
+  labs(
+    title = "Mean and Median of # Distinct Pesticides Detected by Year",
+    x = "Year",
+    y = "# Distinct Pesticides Detected",
+    color = NULL
+  ) +
+  theme_minimal()
+```
+
+### Create Quartiles
+
+```{r}
+consolidada <- consolidada %>%
+  group_by(ano) %>%
+  mutate(
+    sisagua_n_pesticidas_detect_quartile =
+      ntile(desc(sisagua_n_pesticidas_detect), 4)
+  ) %>%
+  ungroup()
+```
+
+## Table
+
+```{r}
+distinct_summary <- consolidada %>%
+  select(
+    ano,
+    sisagua_n_pesticidas_detect,
+    sisagua_n_pesticidas_detect_quartile
+  ) %>%
+  rename(
+    value = sisagua_n_pesticidas_detect,
+    Quartile = sisagua_n_pesticidas_detect_quartile
+  ) %>%
+  group_by(ano, Quartile) %>%
+  summarise(
+    n = n(),
+    Median = median(value, na.rm = TRUE),
+    Min = min(value, na.rm = TRUE),
+    Max = max(value, na.rm = TRUE),
+    .groups = "drop"
+  ) %>%
+  mutate(
+    Range = paste0(Min, "-", Max)
+  ) %>%
+  select(ano, Quartile, n, Median, Range)
+
+distinct_summary
+
+#kable
+
+distinct_summary %>%
+  arrange(ano, Quartile) %>%
+  kable(
+    digits = 2,
+    col.names = c(
+      "Year",
+      "Quartile",
+      "n",
+      "Median Rate",
+      "Range"
+    ),
+    caption = "# Distinct Pesticides Detected in Quartiles by Year"
+  ) %>%
+  collapse_rows(columns = 1) %>%
+  kable_styling(full_width = FALSE)
+```
+
+## Plot
+
+```{r}
+ggplot(distinct_summary,
+       aes(x = ano,
+           y = Median,
+           color = factor(Quartile),
+           group = Quartile)) +
+  geom_line(linewidth = 1) +
+  geom_point(size = 2) +
+  labs(
+    title = "Median # Distinct Pesticides Detected by Quartile and Year",
+    x = "Year",
+    y = "Median % Detected Samples",
+    color = "Quartile"
+  ) +
+  theme_minimal()
+```
+
+## Normality
+
+```{r}
+ggplot(consolidada, aes(x = sisagua_n_pesticidas_detect)) +
+  geom_histogram(bins = 30) +
+  theme_minimal()
+```
+
+# Total harvested area across all crops (hectares)
+
+## Raw Frequencies
+
+```{r}
+#table
+area_raw_summary <- consolidada %>%
+  group_by(ano) %>%
+  summarise(
+    mean_amostras = mean(pam_area_colhida_ha, na.rm = TRUE),
+    median_amostras = median(pam_area_colhida_ha, na.rm = TRUE),
+    .groups = "drop")
+
+area_raw_summary
+
+#plot
+area_raw_plot <- consolidada %>%
+  group_by(ano) %>%
+  summarise(
+    Mean = mean(pam_area_colhida_ha, na.rm = TRUE),
+    Median = median(pam_area_colhida_ha, na.rm = TRUE),
+    .groups = "drop"
+  ) %>%
+  pivot_longer(
+    cols = c(Mean, Median),
+    names_to = "Statistic",
+    values_to = "Value")
+
+ggplot(distinct_plot,
+       aes(x = ano, y = Value, color = Statistic)) +
+  geom_line(linewidth = 1.2) +
+  geom_point(size = 3) +
+  labs(
+    title = "Mean and Median of Harvested Area by Year",
+    x = "Year",
+    y = "Are Harvested (hectares)",
+    color = NULL
+  ) +
+  theme_minimal()
+```
+
+### Create Quartiles
+
+```{r}
+consolidada <- consolidada %>%
+group_by(ano) %>%
+  mutate(
+    pam_area_colhida_ha_quartile =
+      ntile(desc(pam_area_colhida_ha), 4)
+  ) %>%
+  ungroup()
+```
+
+## Table
+
+```{r}
+area_summary <- consolidada %>%
+  select(
+    ano,
+    pam_area_colhida_ha,
+    pam_area_colhida_ha_quartile
+  ) %>%
+  rename(
+    value = pam_area_colhida_ha,
+    Quartile = pam_area_colhida_ha_quartile
+  ) %>%
+  group_by(ano, Quartile) %>%
+  summarise(
+    n = n(),
+    Median = median(value, na.rm = TRUE),
+    Min = min(value, na.rm = TRUE),
+    Max = max(value, na.rm = TRUE),
+    .groups = "drop"
+  ) %>%
+  mutate(
+    Range = paste0(Min, "-", Max)
+  ) %>%
+  select(ano, Quartile, n, Median, Range)
+
+area_summary
+
+#kable
+
+area_summary %>%
+  arrange(ano, Quartile) %>%
+  kable(
+    digits = 2,
+    col.names = c(
+      "Year",
+      "Quartile",
+      "n",
+      "Median Rate",
+      "Range"
+    ),
+    caption = "Harvested Area in Quartiles by Year"
+  ) %>%
+  collapse_rows(columns = 1) %>%
+  kable_styling(full_width = FALSE)
+```
+
+## Plot
+
+```{r}
+ggplot(area_summary,
+       aes(x = ano,
+           y = Median,
+           color = factor(Quartile),
+           group = Quartile)) +
+  geom_line(linewidth = 1) +
+  geom_point(size = 2) +
+  labs(
+    title = "Harvested Area in Quartiles by Year",
+    x = "Year",
+    y = "Harvested Area (hectares)",
+    color = "Quartile"
+  ) +
+  theme_minimal()
+```
+
+## Normality
+
+```{r}
+ggplot(consolidada, aes(x = pam_area_colhida_ha)) +
+  geom_histogram(bins = 30) +
+  theme_minimal()
+```
+
+# Total agricultural production value, all crops (thousands BRL, current prices)
+
+## Raw Frequencies
+
+```{r}
+#table
+valor_raw_summary <- consolidada %>%
+  group_by(ano) %>%
+  summarise(
+    mean_amostras = mean(pam_valor_prod_mil_reais, na.rm = TRUE),
+    median_amostras = median(pam_valor_prod_mil_reais, na.rm = TRUE),
+    .groups = "drop")
+
+area_raw_summary
+
+#plot
+valor_raw_plot <- consolidada %>%
+  group_by(ano) %>%
+  summarise(
+    Mean = mean(pam_valor_prod_mil_reais, na.rm = TRUE),
+    Median = median(pam_valor_prod_mil_reais, na.rm = TRUE),
+    .groups = "drop"
+  ) %>%
+  pivot_longer(
+    cols = c(Mean, Median),
+    names_to = "Statistic",
+    values_to = "Value")
+
+ggplot(valor_raw_plot,
+       aes(x = ano, y = Value, color = Statistic)) +
+  geom_line(linewidth = 1.2) +
+  geom_point(size = 3) +
+  labs(
+    title = "Mean and Median Of Total Agricultural Production Value by Year",
+    x = "Year",
+    y = "Total Agricultural Production Value",
+    color = NULL
+  ) +
+  theme_minimal()
+```
+
+### Create Quartiles
+
+```{r}
+consolidada <- consolidada %>%
+  group_by(ano) %>%
+  mutate(
+    pam_valor_prod_mil_reais_quartile =
+      ntile(desc(pam_valor_prod_mil_reais), 4)
+  ) %>%
+  ungroup()
+```
+
+## Table
+
+```{r}
+valor_summary <- consolidada %>%
+  select(
+    ano,
+    pam_valor_prod_mil_reais,
+    pam_valor_prod_mil_reais_quartile
+  ) %>%
+  rename(
+    value = pam_valor_prod_mil_reais,
+    Quartile = pam_valor_prod_mil_reais_quartile
+  ) %>%
+  group_by(ano, Quartile) %>%
+  summarise(
+    n = n(),
+    Median = median(value, na.rm = TRUE),
+    Min = min(value, na.rm = TRUE),
+    Max = max(value, na.rm = TRUE),
+    .groups = "drop"
+  ) %>%
+  mutate(
+    Range = paste0(Min, "-", Max)
+  ) %>%
+  select(ano, Quartile, n, Median, Range)
+
+valor_summary
+
+#kable
+
+valor_summary %>%
+  arrange(ano, Quartile) %>%
+  kable(
+    digits = 2,
+    col.names = c(
+      "Year",
+      "Quartile",
+      "n",
+      "Median Rate",
+      "Range"
+    ),
+    caption = "Total Agricultural Production Value in Quartiles by Year"
+  ) %>%
+  collapse_rows(columns = 1) %>%
+  kable_styling(full_width = FALSE)
+```
+
+## Plot
+
+```{r}
+ggplot(valor_summary,
+       aes(x = ano,
+           y = Median,
+           color = factor(Quartile),
+           group = Quartile)) +
+  geom_line(linewidth = 1) +
+  geom_point(size = 2) +
+  labs(
+    title = "Total Agricultural Production Value in Quartiles by Year",
+    x = "Year",
+    y = "Total Agricultural Production Value (BRL)",
+    color = "Quartile"
+  ) +
+  theme_minimal()
+```
+
+## Normality
+
+```{r}
+ggplot(consolidada, aes(x = pam_valor_prod_mil_reais)) +
+  geom_histogram(bins = 30) +
+  theme_minimal()
 ```
