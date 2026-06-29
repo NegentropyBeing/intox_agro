@@ -1,1 +1,1 @@
-project_root <- "C:/Users/alyss/Documents/GitHub/intox_agro"
+project_root <- "C:/Users/alexa/Desktop/intox_agro"
