@@ -3,8 +3,8 @@ title: "State of São Paulo ,Brazil population Descriptive_analysis"
 author: "Abirami Somasundaram"
 date: "2026-06-08"
 output:
-  html_document: default
   pdf_document: default
+  html_document: default
 ---
 
 ```{r setup, include=FALSE}
