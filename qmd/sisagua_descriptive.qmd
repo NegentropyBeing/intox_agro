@@ -1,0 +1,341 @@
+---
+title: "SISAGUA — Descriptive Analysis"
+subtitle: "Drinking Water Pesticide Monitoring | São Paulo state, 2014–2024"
+date: today
+format:
+  html:
+    toc: true
+    toc-depth: 3
+    code-fold: true
+    self-contained: true
+execute:
+  warning: false
+  message: false
+---
+
+## 1. Setup
+
+```{r}
+library(arrow)
+library(dplyr)
+library(tidyr)
+library(ggplot2)
+library(knitr)
+library(scales)
+
+source(file.path(rprojroot::find_rstudio_root_file(), "config.R"))
+```
+
+---
+
+## 2. Load data
+
+```{r}
+sisagua_raw <- read_parquet(
+  file.path(project_root, "resultados/SISAGUA/sisagua_sp_2014_2024.parquet")
+) |>
+  mutate(
+    cod_ibge = as.character(cod_ibge),
+    ano      = as.integer(NU_ANO)
+  )
+
+pop_raw <- read_parquet(
+  file.path(project_root, "resultados/contextual/populacao_sp_municipio_ano.parquet")
+) |>
+  mutate(ano = as.integer(ano)) |>
+  group_by(cod_ibge, ano) |>
+  summarise(pop_total = sum(populacao, na.rm = TRUE), .groups = "drop")
+
+rural <- read_parquet(
+  file.path(project_root, "resultados/contextual/pop_rural_urb_sp_2022.parquet")
+) |>
+  mutate(cod_ibge = as.character(cod_ibge)) |>
+  select(cod_ibge, pct_rural_2022)
+
+# Full grid of all SP municipalities × all years
+all_munic <- pop_raw |> select(cod_ibge) |> distinct()
+all_years <- tibble(ano = 2014:2024)
+grid <- crossing(all_munic, all_years)
+
+cat("Total municipality-years in grid:", nrow(grid), "\n")
+```
+
+---
+
+## 3. Build municipality × year monitoring base
+
+```{r}
+sisagua_mun <- sisagua_raw |>
+  group_by(cod_ibge, ano) |>
+  summarise(
+    n_amostras           = n(),
+    n_detect_num         = sum(TIPO_RESULTADO == "NUMERICO", na.rm = TRUE),
+    n_detect_lq          = sum(TIPO_RESULTADO %in% c("NUMERICO", "MENOR_LQ"), na.rm = TRUE),
+    n_exceedances_vmp    = sum(
+      TIPO_RESULTADO == "NUMERICO" &
+      !is.na(RESULTADO_NUM) &
+      !is.na(suppressWarnings(as.numeric(VMP))) &
+      RESULTADO_NUM > suppressWarnings(as.numeric(VMP)),
+      na.rm = TRUE
+    ),
+    n_compostos_detect   = n_distinct(PARAMETRO_FINAL[TIPO_RESULTADO == "NUMERICO"]),
+    pct_detect_num       = 100 * n_detect_num / n_amostras,
+    pct_exceedances_vmp  = 100 * n_exceedances_vmp / n_amostras,
+    .groups = "drop"
+  ) |>
+  mutate(monitorado = TRUE)
+
+# Join to full grid — unmonitored municipality-years get NA
+base <- grid |>
+  left_join(sisagua_mun, by = c("cod_ibge", "ano")) |>
+  mutate(monitorado = replace_na(monitorado, FALSE)) |>
+  left_join(pop_raw,  by = c("cod_ibge", "ano")) |>
+  left_join(rural,    by = "cod_ibge")
+
+cat("Municipality-years monitored:",   sum(base$monitorado), "\n")
+cat("Municipality-years unmonitored:", sum(!base$monitorado), "\n")
+```
+
+---
+
+## 4. Monitoring coverage over time
+
+How many municipalities had at least one water sample tested each year?
+
+```{r}
+coverage_year <- base |>
+  group_by(ano) |>
+  summarise(
+    n_total      = n_distinct(cod_ibge),
+    n_monitorado = sum(monitorado),
+    pct_monit    = round(100 * n_monitorado / n_total, 1)
+  )
+
+kable(coverage_year, col.names = c("Year", "Total municipalities",
+                                    "Monitored", "% monitored"))
+```
+
+```{r}
+ggplot(coverage_year, aes(ano, pct_monit)) +
+  geom_col(fill = "steelblue", alpha = 0.85) +
+  geom_text(aes(label = paste0(pct_monit, "%")), vjust = -0.4, size = 3.5) +
+  scale_x_continuous(breaks = 2014:2024) +
+  scale_y_continuous(limits = c(0, 100)) +
+  labs(title = "Monitoring coverage — % of SP municipalities with water testing",
+       x = "Year", y = "% municipalities monitored") +
+  theme_minimal()
+```
+
+---
+
+## 5. Monitored vs. unmonitored municipalities
+
+Are unmonitored municipalities systematically more rural?
+
+```{r}
+# For each municipality: was it ever monitored across the full period?
+monit_status <- base |>
+  group_by(cod_ibge) |>
+  summarise(
+    ever_monitorado = any(monitorado),
+    pct_rural_2022  = first(na.omit(pct_rural_2022)),
+    .groups = "drop"
+  ) |>
+  mutate(
+    status = if_else(ever_monitorado, "Monitored", "Never monitored"),
+    rural_cat = cut(pct_rural_2022,
+                    breaks = c(-Inf, 10, 30, 60, 100),
+                    labels = c("Urban (<10%)", "Low rural (10-30%)",
+                               "Medium rural (30-60%)", "High rural (>60%)"),
+                    include.lowest = TRUE)
+  )
+
+# Summary table
+monit_status |>
+  count(status, rural_cat) |>
+  pivot_wider(names_from = status, values_from = n, values_fill = 0) |>
+  kable(caption = "Municipality count by rural category and monitoring status")
+```
+
+```{r}
+ggplot(monit_status |> filter(!is.na(pct_rural_2022)),
+       aes(x = status, y = pct_rural_2022, fill = status)) +
+  geom_boxplot(alpha = 0.8, outlier.alpha = 0.3) +
+  scale_fill_manual(values = c("Monitored" = "steelblue",
+                                "Never monitored" = "#C0392B")) +
+  labs(title = "Rural population % by monitoring status",
+       x = NULL, y = "% rural population (Census 2022)", fill = NULL) +
+  theme_minimal() +
+  theme(legend.position = "none")
+```
+
+---
+
+## 6. Sample volume distribution among monitored municipalities
+
+```{r}
+sample_vol <- base |>
+  filter(monitorado) |>
+  group_by(cod_ibge) |>
+  summarise(
+    total_amostras = sum(n_amostras, na.rm = TRUE),
+    anos_monit     = n(),
+    .groups = "drop"
+  )
+
+# Quartile table
+breaks_q <- quantile(sample_vol$total_amostras, probs = c(0, .25, .5, .75, 1))
+sample_vol |>
+  mutate(quartil = cut(total_amostras, breaks = breaks_q,
+                       labels = c("Q1", "Q2", "Q3", "Q4"),
+                       include.lowest = TRUE)) |>
+  group_by(quartil) |>
+  summarise(
+    n_municipios   = n(),
+    min_amostras   = min(total_amostras),
+    median_amostras = median(total_amostras),
+    max_amostras   = max(total_amostras)
+  ) |>
+  kable(caption = "Sample volume quartiles among monitored municipalities (total 2014–2024)")
+```
+
+```{r}
+ggplot(sample_vol, aes(x = total_amostras)) +
+  geom_histogram(bins = 40, fill = "steelblue", colour = "white", alpha = 0.85) +
+  scale_x_log10(labels = comma) +
+  labs(title = "Distribution of total water samples per municipality (log scale)",
+       x = "Total samples (log scale)", y = "Number of municipalities") +
+  theme_minimal()
+```
+
+---
+
+## 7. Detection prevalence by year (monitored municipalities only)
+
+Among monitored municipalities, what share had at least one quantifiable detection?
+
+```{r}
+detect_year <- base |>
+  filter(monitorado) |>
+  group_by(ano) |>
+  summarise(
+    n_monitorado        = n(),
+    n_com_deteccao_num  = sum(n_detect_num > 0, na.rm = TRUE),
+    n_com_deteccao_lq   = sum(n_detect_lq  > 0, na.rm = TRUE),
+    pct_deteccao_num    = round(100 * n_com_deteccao_num / n_monitorado, 1),
+    pct_deteccao_lq     = round(100 * n_com_deteccao_lq  / n_monitorado, 1),
+    .groups = "drop"
+  )
+
+kable(detect_year,
+      col.names = c("Year", "Monitored", "With NUMERICO detection",
+                    "With any detection", "% NUMERICO", "% any detection"))
+```
+
+```{r}
+detect_year |>
+  select(ano, pct_deteccao_num, pct_deteccao_lq) |>
+  pivot_longer(-ano, names_to = "threshold", values_to = "pct") |>
+  mutate(threshold = recode(threshold,
+    pct_deteccao_num = "NUMERICO only",
+    pct_deteccao_lq  = "NUMERICO + MENOR_LQ"
+  )) |>
+  ggplot(aes(ano, pct, colour = threshold, group = threshold)) +
+  geom_line(linewidth = 0.9) +
+  geom_point(size = 2.5) +
+  scale_x_continuous(breaks = 2014:2024) +
+  scale_y_continuous(limits = c(0, 100)) +
+  labs(title = "% of monitored municipalities with at least one pesticide detection",
+       x = "Year", y = "% municipalities", colour = "Detection threshold") +
+  theme_minimal() +
+  theme(legend.position = "top")
+```
+
+> **Note:** The sharp drop in NUMERICO detections around 2017 likely reflects a change
+> in how SISAGUA classified results rather than a true reduction in pesticide presence.
+> The NUMERICO + MENOR_LQ line is more stable and is the recommended threshold for
+> trend analysis.
+
+---
+
+## 8. Most frequently detected compounds (municipality-level frequency)
+
+Which pesticides were detected (NUMERICO) in the greatest number of municipalities?
+
+```{r}
+compostos_mun <- sisagua_raw |>
+  filter(TIPO_RESULTADO == "NUMERICO") |>
+  group_by(PARAMETRO_FINAL) |>
+  summarise(
+    n_municipios  = n_distinct(cod_ibge),
+    n_deteccoes   = n(),
+    conc_mediana  = round(median(RESULTADO_NUM, na.rm = TRUE), 4),
+    conc_max      = round(max(RESULTADO_NUM,    na.rm = TRUE), 4),
+    .groups = "drop"
+  ) |>
+  arrange(desc(n_municipios)) |>
+  slice_head(n = 20)
+
+kable(compostos_mun,
+      col.names = c("Pesticide", "Municipalities", "Total detections",
+                    "Median conc. (µg/L)", "Max conc. (µg/L)"),
+      caption = "Top 20 pesticides by number of municipalities with quantifiable detection")
+```
+
+```{r}
+compostos_mun |>
+  slice_head(n = 15) |>
+  mutate(PARAMETRO_FINAL = reorder(PARAMETRO_FINAL, n_municipios)) |>
+  ggplot(aes(PARAMETRO_FINAL, n_municipios)) +
+  geom_col(fill = "steelblue", alpha = 0.85) +
+  coord_flip() +
+  labs(title = "Top 15 pesticides — municipalities with quantifiable detection",
+       x = NULL, y = "Number of municipalities") +
+  theme_minimal()
+```
+
+---
+
+## 9. Regulatory exceedances (VMP)
+
+```{r}
+exceedance_mun <- base |>
+  filter(monitorado) |>
+  group_by(cod_ibge) |>
+  summarise(
+    total_amostras       = sum(n_amostras,        na.rm = TRUE),
+    total_exceedances    = sum(n_exceedances_vmp,  na.rm = TRUE),
+    anos_com_exceedance  = sum(n_exceedances_vmp > 0, na.rm = TRUE),
+    .groups = "drop"
+  ) |>
+  filter(total_exceedances > 0) |>
+  arrange(desc(total_exceedances))
+
+cat("Municipalities with at least one VMP exceedance:", nrow(exceedance_mun), "\n")
+
+exceedance_mun |>
+  slice_head(n = 20) |>
+  kable(col.names = c("Municipality (cod_ibge)", "Total samples",
+                       "Total exceedances", "Years with exceedance"),
+        caption = "Top 20 municipalities by number of regulatory exceedances")
+```
+
+```{r}
+# Annual count of municipalities with at least one exceedance
+base |>
+  filter(monitorado) |>
+  group_by(ano) |>
+  summarise(
+    n_monitorado      = n(),
+    n_com_exceedance  = sum(n_exceedances_vmp > 0, na.rm = TRUE),
+    pct_exceedance    = round(100 * n_com_exceedance / n_monitorado, 1),
+    .groups = "drop"
+  ) |>
+  ggplot(aes(ano, pct_exceedance)) +
+  geom_col(fill = "#C0392B", alpha = 0.85) +
+  geom_text(aes(label = paste0(pct_exceedance, "%")), vjust = -0.4, size = 3.5) +
+  scale_x_continuous(breaks = 2014:2024) +
+  labs(title = "% of monitored municipalities with at least one VMP exceedance",
+       x = "Year", y = "% municipalities") +
+  theme_minimal()
+```
