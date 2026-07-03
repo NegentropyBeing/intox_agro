@@ -1,6 +1,6 @@
 ---
 title: "Agricultural Variables — Continuous Distributions"
-subtitle: "Quartile and Quintile Analysis | São Paulo state municipalities"
+subtitle: "Quartile Analysis | São Paulo state municipalities"
 date: today
 format:
   html:

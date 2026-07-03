@@ -1,0 +1,231 @@
+---
+title: "SIM - Deaths (individual-level)"
+author: "Abirami Somasundaram"
+date: "2026-06-29"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## R Markdown
+
+This is an R Markdown document. Markdown is a simple formatting syntax for authoring HTML, PDF, and MS Word documents. For more details on using R Markdown see <http://rmarkdown.rstudio.com>.
+
+When you click the **Knit** button a document will be generated that includes both content as well as the output of any embedded R code chunks within the document. You can embed an R code chunk like this:
+
+```{r}
+library(dplyr)
+library(tidyr)
+library(knitr)
+library(ggplot2)
+library(arrow)
+library(purrr)
+library(scales)
+library(tidyverse)
+library(stringr)
+library(ggh4x)
+library(tidyverse)
+```
+
+```{r read-data}
+df <- read_parquet("/Users/abiramisomasundaram/Desktop/Brazil pesticides/Data/Dados Version 2/Dados/resultados/SIM/sim_iexo_sp_2014_2024.parquet") |> 
+
+  as_tibble()
+
+glimpse(df)
+
+```
+2. Define variables
+```{r define-variables}
+date_col <- "DTOBITO"
+age_col <- "IDADEanos"
+
+categorical_vars <- c(
+  "CAUSABAS",
+  "CAUSABAS_O",
+  "CODMUNRES",
+  "CODMUNOCOR",
+  "SEXO",
+  "RACACOR",
+  "ESC2010",
+  "OCUP",
+  "ACIDTRAB",
+  "CIRCOBITO",
+  "ASSISTMED"
+)
+
+all_analysis_vars <- c(date_col, age_col, categorical_vars)
+
+# Check that all variables exist in the dataset
+setdiff(all_analysis_vars, names(df))
+```
+
+3. Missingness function
+```{r missingness-function}
+
+is_missing_value <- function(x) {
+  is.na(x) | 
+    ifelse(is.character(x), str_squish(x) == "", FALSE)
+}
+
+missing_table <- function(data, vars) {
+  map_dfr(vars, function(v) {
+    x <- data[[v]]
+    miss <- is_missing_value(x)
+    
+    tibble(
+      variable = v,
+      total_n = length(x),
+      missing_n = sum(miss),
+      missing_percent = round(100 * mean(miss), 2),
+      non_missing_n = sum(!miss),
+      non_missing_percent = round(100 * mean(!miss), 2)
+    )
+  })
+}
+```
+
+4. Frequency table function
+
+```{r frequency-function}
+
+freq_table <- function(data, var, top_n = Inf) {
+  
+  total <- nrow(data)
+  
+  tab <- data |>
+    transmute(category = as.character(.data[[var]])) |>
+    mutate(
+      category = str_squish(category),
+      category = if_else(is.na(category) | category == "", "Missing", category)
+    ) |>
+    count(category, name = "n", sort = TRUE) |>
+    mutate(percent = 100 * n / total)
+  
+  # keep only top N categories and combine the rest as "Other"
+  if (is.finite(top_n)) {
+    missing_row <- tab |> filter(category == "Missing")
+    non_missing_rows <- tab |> filter(category != "Missing")
+    
+    top_rows <- non_missing_rows |> slice_head(n = top_n)
+    
+    other_rows <- anti_join(non_missing_rows, top_rows, by = "category") |>
+      summarise(
+        category = "Other",
+        n = sum(n),
+        percent = sum(percent),
+        .groups = "drop"
+      ) |>
+      filter(n > 0)
+    
+    tab <- bind_rows(top_rows, other_rows, missing_row)
+  }
+  
+  tab |>
+    mutate(
+      variable = var,
+      percent = round(percent, 2)
+    ) |>
+    select(variable, category, n, percent)
+}
+```
+
+4. Prepare date and age variables
+
+```{r prepare-date-age}
+df_analysis <- df |>
+  mutate(
+    death_date = ymd(.data[[date_col]]),
+    death_year = year(death_date),
+    death_calendar_quarter = paste0(year(death_date), "-Q", quarter(death_date)),
+    age_years = parse_number(as.character(.data[[age_col]]))
+  )
+```
+
+5. Missingness report
+```{r missingness-report}
+missing_results <- missing_table(df, all_analysis_vars)
+
+kable(
+  missing_results,
+  caption = "Missingness by variable"
+)
+```
+
+# 6. Frequency tables for categorical variables
+
+```{r categorical-frequency-tables, results='asis'}
+for (v in categorical_vars) {
+  cat("\n\n## Frequency table:", v, "\n\n")
+  
+  tab <- freq_table(df_analysis, v)
+  
+  print(
+    kable(
+      tab,
+      caption = paste("Frequency distribution for", v)
+    )
+  )
+}
+```
+
+
+7. Frequency tables with top categories only
+
+Some variables, such as municipality, ICD-10 code, and occupation, may have many categories.  
+You may want to show only the top 20 categories and group the rest as `"Other"`.
+
+```{r top-category-tables, results='asis'}
+high_cardinality_vars <- c(
+  "CAUSABAS",
+  "CAUSABAS_O",
+  "CODMUNRES",
+  "CODMUNOCOR",
+  "OCUP"
+)
+
+for (v in high_cardinality_vars) {
+  cat("\n\n## Top 20 categories:", v, "\n\n")
+  
+  tab <- freq_table(df_analysis, v, top_n = 20)
+  
+  print(
+    kable(
+      tab,
+      caption = paste("Top 20 frequency distribution for", v)
+    )
+  )
+}
+```
+
+
+# 10. Date of death summaries
+
+## By year
+
+```{r death-year-frequency}
+death_year_table <- freq_table(df_analysis, "death_year")
+
+kable(
+  death_year_table,
+  caption = "Frequency distribution by year of death"
+)
+```
+
+
+## By calendar quarter
+
+```{r death-quarter-frequency}
+death_quarter_table <- freq_table(df_analysis, "death_calendar_quarter")
+
+kable(
+  death_quarter_table,
+  caption = "Frequency distribution by calendar quarter of death"
+)
+```
+
+
+
+
