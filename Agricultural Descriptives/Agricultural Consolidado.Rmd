@@ -29,12 +29,58 @@ library(kableExtra)
 consolidada <- read_parquet("~/GitHub/intox_agro/resultados/base_consolidada_sp_2014_2024.parquet")
 ```
 
-## Missing
+## Missingness
 
 ```{r}
-plot_missing(consolidada)
-
+plot_missing(
+  consolidada[, c(
+    "sisagua_n_pesticidas_detect",
+    "sisagua_pct_deteccao",
+    "pam_area_colhida_ha",
+    "pam_valor_prod_mil_reais")])
 ```
+
+```{r}
+#year missingness
+consolidada %>%
+  group_by(ano) %>%
+  summarise(
+    pct_missing_detect =
+      mean(is.na(sisagua_pct_deteccao)) * 100,
+    pct_missing_area =
+      mean(is.na(pam_area_colhida_ha)) * 100,
+    pct_missing_value =
+      mean(is.na(pam_valor_prod_mil_reais)) * 100
+  )
+
+#municipality missingness
+consolidada %>%
+  filter(is.na(sisagua_pct_deteccao)) %>%
+  distinct(cod_ibge)
+
+#trends in missingness
+consolidada %>%
+  group_by(is.na(sisagua_pct_deteccao)) %>%
+  summarise(
+    median_population = median(pop_total, na.rm = TRUE),
+    median_income = median(renda_per_capita, na.rm = TRUE),
+    n = n())
+
+consolidada %>%
+  group_by(is.na(pam_valor_prod_mil_reais)) %>%
+  summarise(
+    median_population = median(pop_total, na.rm = TRUE),
+    median_income = median(renda_per_capita, na.rm = TRUE),
+    n = n())
+
+
+#identical missingness
+all(
+  is.na(consolidada$pam_area_colhida_ha) ==
+    is.na(consolidada$pam_valor_prod_mil_reais))
+```
+
+`sisagua_pct_deteccao` is missing \>10% in years 2014-2017 and 2023-2024, in a total of 484 municipalities. `pam_area_colhida_ha` and `pam_valor_prod_mil_reais` have consistent missingness around 6-7% - and are missing in the exact same municipalities. The median population of municipalities with missing data for `sisagua_pct_deteccao` is 8277 compared to the median population of non-missing municipalities being 15975. Income does not appear to be a trend (695.67 in non-missing vs 636 in missing). On the other hand, PAM missingness is higher in municipalities with larger median populations (159572 in missing vs 11668 in non-missing). Additionally, missingness is concentrated in municipalities with higher median income (767.85 in missing vs 680.56 in non-missing).
 
 # Samples with at least one quantifiable pesticide detection
 
@@ -129,7 +175,7 @@ detect_summary %>%
       "Year",
       "Quartile",
       "n",
-      "Median Rate",
+      "Median",
       "Range"
     ),
     caption = "% Detected Samples in Quartiles by Year"
@@ -150,14 +196,16 @@ ggplot(detect_summary,
   geom_line(linewidth = 1) +
   geom_point(size = 2) +
   labs(
-    title = "Median % Detected Samples by Quartile and Year",
+    title = "Median % Samples with Quantifiable Detection in Quartiles by Year",
     x = "Year",
-    y = "Median % Detected Samples",
+    y = "Median % Samples with Quantifiable Detection",
     color = "Quartile"
   ) +
   theme_minimal()
 
 ```
+
+Here we can see that a majority of municipalities do not detect quantifiable levels of pesticides in their samples. However, among samples in the top 25% and 50% of samples with quantifiable levels of pesticides, we see that 100% of samples tested from 2014-2016 had quantifiable levels of pesticides, dropping to below 25% from 2019-2022 and rising back up to above 50% 2023-2024.
 
 ## Normality
 
@@ -258,7 +306,7 @@ distinct_summary %>%
       "Year",
       "Quartile",
       "n",
-      "Median Rate",
+      "Median",
       "Range"
     ),
     caption = "# Distinct Pesticides Detected in Quartiles by Year"
@@ -285,6 +333,8 @@ ggplot(distinct_summary,
   ) +
   theme_minimal()
 ```
+
+From 2014-2022, 27 distinct pesticides were detected in the top 25% of municipalities.
 
 ## Normality
 
@@ -385,7 +435,7 @@ area_summary %>%
       "Year",
       "Quartile",
       "n",
-      "Median Rate",
+      "Median",
       "Range"
     ),
     caption = "Harvested Area in Quartiles by Year"
@@ -404,6 +454,9 @@ ggplot(area_summary,
            group = Quartile)) +
   geom_line(linewidth = 1) +
   geom_point(size = 2) +
+  scale_y_continuous(
+    breaks = seq(0, 40000, by = 5000)
+  ) +
   labs(
     title = "Harvested Area in Quartiles by Year",
     x = "Year",
@@ -412,6 +465,8 @@ ggplot(area_summary,
   ) +
   theme_minimal()
 ```
+
+The median area of harvested land in the top 25% municipalities increases from 30,000 in 2014 hectares to 34,218 hectares in 2023 and drops to 33,518 in 2024. The second-highest 25% of municipalities see steady median areas of harvested land between 2014-2024, ranging from 11,963.5 hectares to 13,445.5 hectares.
 
 ## Normality
 
@@ -512,7 +567,7 @@ valor_summary %>%
       "Year",
       "Quartile",
       "n",
-      "Median Rate",
+      "Median",
       "Range"
     ),
     caption = "Total Agricultural Production Value in Quartiles by Year"
@@ -532,13 +587,15 @@ ggplot(valor_summary,
   geom_line(linewidth = 1) +
   geom_point(size = 2) +
   labs(
-    title = "Total Agricultural Production Value in Quartiles by Year",
+    title = "Median Total Agricultural Production Value in Quartiles by Year",
     x = "Year",
-    y = "Total Agricultural Production Value (BRL)",
+    y = "Median Total Agricultural Production Value (BRL)",
     color = "Quartile"
   ) +
   theme_minimal()
 ```
+
+The median total agricultural production value increases between 2014 and 2024 for all municipalities. The top 25% see this increase from 132,040.5 BRL in 2014 to 416,699.0 BRL in 2024. s
 
 ## Normality
 
