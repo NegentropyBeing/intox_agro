@@ -1,0 +1,360 @@
+---
+title: "SINAN - Pesticide Notification Data Summary"
+author: "Abirami Somasundaram"
+date: "2026-07-03"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## R Markdown
+
+This is an R Markdown document. Markdown is a simple formatting syntax for authoring HTML, PDF, and MS Word documents. For more details on using R Markdown see <http://rmarkdown.rstudio.com>.
+
+When you click the **Knit** button a document will be generated that includes both content as well as the output of any embedded R code chunks within the document. You can embed an R code chunk like this:
+
+```{r}
+install.packages(c("tidyverse", "janitor", "lubridate", "naniar", "skimr", "knitr", "kableExtra", "scales"))
+```
+
+
+
+```{r library, echo=FALSE}
+library(dplyr)
+library(tidyr)
+library(knitr)
+library(ggplot2)
+library(arrow)
+library(purrr)
+library(scales)
+library(tidyverse)
+library(stringr)
+library(ggh4x)
+library(tidyverse)
+library(janitor)
+library(lubridate)
+library(naniar)
+library(skimr)
+library(kableExtra)
+
+theme_set(theme_minimal())
+```
+
+1. Load Data 
+```{r}
+df_raw <- read_parquet("/Users/abiramisomasundaram/Desktop/Brazil pesticides/Data/Dados Version 2/Dados/resultados/SINAN/sinan_iexo_sp_2014_2024.parquet") 
+  
+df <- df_raw %>%
+clean_names()
+
+glimpse(df)
+
+```
+
+
+2. 
+```{r}
+df <- df %>%
+  mutate(
+    # Keep geographic and categorical codes as strings
+    id_mn_resi = as.character(id_mn_resi),
+    sg_uf = as.character(sg_uf),
+    nu_ano = as.character(nu_ano),
+    ano_nasc = as.character(ano_nasc),
+    cs_sexo = as.character(cs_sexo),
+    cs_raca = as.character(cs_raca),
+    agente_tox = as.character(agente_tox),
+    lavoura = as.character(lavoura),
+    circunstan = as.character(circunstan),
+    evolucao = as.character(evolucao),
+    sit_trab = as.character(sit_trab),
+    hospital = as.character(hospital),
+
+    # Convert years to numeric
+    ano_origem_num = as.numeric(ano_origem),
+    nu_ano_num = as.numeric(nu_ano),
+    ano_nasc_num = as.numeric(ano_nasc),
+
+    # Parse dates flexibly
+    dt_notific_date = as_date(parse_date_time(
+      dt_notific,
+      orders = c("ymd", "dmy", "mdy")
+    )),
+    dt_sin_pri_date = as_date(parse_date_time(
+      dt_sin_pri,
+      orders = c("ymd", "dmy", "mdy")
+    )),
+
+    # Derived age at notification
+    age = nu_ano_num - ano_nasc_num,
+
+    # Days between symptom onset and notification
+    days_symptom_to_notification = as.numeric(dt_notific_date - dt_sin_pri_date),
+
+    # Agricultural context: non-empty LAVOURA
+    agricultural_context = case_when(
+      is.na(lavoura) | str_trim(lavoura) == "" ~ "No crop recorded",
+      TRUE ~ "Crop recorded"
+    ),
+
+    # Sex label
+    sex_label = case_when(
+      cs_sexo == "M" ~ "Male",
+      cs_sexo == "F" ~ "Female",
+      TRUE ~ "Missing/Unknown"
+    ),
+
+    # Race/ethnicity label
+    race_label = case_when(
+      cs_raca == "1" ~ "White",
+      cs_raca == "2" ~ "Black",
+      cs_raca == "3" ~ "Asian/Yellow",
+      cs_raca == "4" ~ "Brown/Pardo",
+      cs_raca == "5" ~ "Indigenous",
+      TRUE ~ "Missing/Unknown"
+    ),
+
+    # Outcome label
+    outcome_label = case_when(
+      evolucao == "1" ~ "Cure",
+      evolucao == "2" ~ "Death from notified condition",
+      evolucao == "3" ~ "Death from other cause",
+      evolucao == "4" ~ "Lost to follow-up",
+      evolucao == "5" ~ "Transfer",
+      evolucao == "9" ~ "Unknown",
+      TRUE ~ "Missing"
+    ),
+
+    # Hospitalisation label
+    hospitalised_label = case_when(
+      hospital == "1" ~ "Yes",
+      hospital == "2" ~ "No",
+      TRUE ~ "Missing/Unknown"
+    ),
+
+    # Circumstance: occupational accident
+    occupational_accident = case_when(
+      circunstan  == "02" ~ "Occupational accident",
+      is.na(circunstan) | str_trim(circunstan) == "" ~ "Missing",
+      TRUE ~ "Other circumstance"
+    )
+  )
+
+glimpse(df)
+```
+
+3. Define Variables
+
+```{r define-vars}
+categorical_vars <- c(
+
+  "sg_uf",
+  "cs_sexo",
+  "sex_label",
+  "cs_raca",
+  "race_label",
+  "agente_tox",
+  "lavoura",
+  "agricultural_context",
+  "circunstan",
+  "occupational_accident",
+  "evolucao",
+  "outcome_label",
+  "sit_trab",
+  "hospital",
+  "hospitalised_label"
+)
+
+numeric_vars <- c(
+  "ano_origem_num",
+  "nu_ano_num",
+  "ano_nasc_num",
+  "age",
+  "days_symptom_to_notification"
+)
+```
+
+
+4. Missingness Summary 
+
+```{r missingness-summary}
+is_missing_value <- function(x) {
+  if (is.character(x)) {
+    is.na(x) | str_trim(x) == ""
+  } else {
+    is.na(x)
+  }
+}
+
+missing_summary <- df %>%
+  summarise(across(
+    everything(),
+    list(
+      missing_n = ~sum(is_missing_value(.)),
+      missing_pct = ~mean(is_missing_value(.)) * 100
+    ),
+    .names = "{.col}_{.fn}"
+  )) %>%
+  pivot_longer(
+    cols = everything(),
+    names_to = c("variable", ".value"),
+    names_pattern = "(.+)_(missing_n|missing_pct)"
+  ) %>%
+  arrange(desc(missing_pct))
+
+missing_summary %>%
+  mutate(missing_pct = round(missing_pct, 2)) %>%
+  kable(
+    caption = "Missingness summary by variable",
+    col.names = c("Variable", "Missing n", "Missing %")
+  ) %>%
+  kable_styling(full_width = FALSE)
+```
+
+5. Visualisation: missingness
+
+```{r missingness-plot, fig.width=9, fig.height=6}
+missing_summary %>%
+  mutate(variable = fct_reorder(variable, missing_pct)) %>%
+  ggplot(aes(x = variable, y = missing_pct)) +
+  geom_col(fill = "#2C7FB8") +
+  coord_flip() +
+  scale_y_continuous(labels = percent_format(scale = 1)) +
+  labs(
+    title = "Missingness by variable",
+    x = "Variable",
+    y = "Missing values (%)"
+  )
+```
+
+
+6. Categorical summaries
+
+```{r categorical-summary-function}
+summarise_categorical <- function(data, var) {
+  
+  data %>%
+    mutate(
+      category = as.character(.data[[var]]),
+      category = if_else(
+        is.na(category) | str_trim(category) == "",
+        "Missing",
+        category
+      )
+    ) %>%
+    count(category, name = "n") %>%
+    mutate(
+      variable = var,
+      percent = 100 * n / sum(n)
+    ) %>%
+    select(variable, category, n, percent) %>%
+    arrange(variable, desc(n))
+}
+```
+
+```{r categorical-summary}
+categorical_summary <- map_dfr(
+  categorical_vars,
+  ~summarise_categorical(df, .x)
+)
+
+categorical_summary %>%
+  mutate(percent = round(percent, 2)) %>%
+  kable(
+    caption = "Categorical variable summary: n and %",
+    col.names = c("Variable", "Category", "n", "%") 
+#variable -Name of the categorical variable , category -Category/code/value, n - Absolute frequency/count,percent-Relative frequency/percentage
+  ) %>%
+  kable_styling(full_width = FALSE)
+```
+
+7. . Visualisation: notifications over time
+
+```{r notifications-over-time, fig.width=9, fig.height=5}
+df %>%
+  filter(!is.na(nu_ano_num)) %>%
+  count(nu_ano_num, name = "n") %>%
+  ggplot(aes(x = nu_ano_num, y = n)) +
+  geom_line(linewidth = 1, color = "#08519C") +
+  geom_point(size = 2, color = "#08519C") +
+  scale_y_continuous(labels = comma) +
+  labs(
+    title = "Pesticide notifications over time",
+    x = "Year of notification",
+    y = "Number of notifications"
+  )
+```
+8. Visualisation: outcome by occupational accident status
+
+```{r outcome-by-occupational-status-heatmap, fig.width=9, fig.height=6}
+df %>%
+  count(occupational_accident, outcome_label, name = "n") %>%
+  group_by(occupational_accident) %>%
+  mutate(percent = 100 * n / sum(n)) %>%
+  ungroup() %>%
+  ggplot(aes(
+    x = occupational_accident,
+    y = outcome_label,
+    fill = percent
+  )) +
+  geom_tile(color = "white") +
+  geom_text(
+    aes(label = paste0(round(percent, 1), "%\n", "n=", n)),
+    size = 3
+  ) +
+  scale_fill_gradient(
+    low = "#F7FBFF",
+    high = "#08519C",
+    labels = percent_format(scale = 1)
+  ) +
+  labs(
+    title = "Outcome distribution by occupational accident status",
+    x = "Circumstance of exposure",
+    y = "Outcome",
+    fill = "Percentage"
+  ) +
+  theme_minimal() +
+  theme(
+    axis.text.x = element_text(angle = 30, hjust = 1)
+  )
+```
+
+
+9. Top 10 municipalites with Highest Pesticide Notification
+
+```{r top-10-municipalities, fig.width=9, fig.height=6}
+top10_municipalities <- df %>%
+  filter(
+    !is.na(id_mn_resi),
+    stringr::str_trim(id_mn_resi) != ""
+  ) %>%
+  count(id_mn_resi, name = "n_notifications") %>%
+  arrange(desc(n_notifications)) %>%
+  slice_head(n = 10)
+
+top10_municipalities %>%
+  mutate(
+    id_mn_resi = forcats::fct_reorder(id_mn_resi, n_notifications)
+  ) %>%
+  ggplot(aes(x = id_mn_resi, y = n_notifications)) +
+  geom_col(fill = "#2C7FB8") +
+  coord_flip() +
+  geom_text(
+    aes(label = n_notifications),
+    hjust = -0.1,
+    size = 3.5
+  ) +
+  scale_y_continuous(
+    labels = scales::comma,
+    expand = expansion(mult = c(0, 0.12))
+  ) +
+  labs(
+    title = "Top 10 municipalities by number of pesticide notifications",
+    x = "Municipality of residence, IBGE code",
+    y = "Number of notifications"
+  ) +
+  theme_minimal()
+
+```
