@@ -77,7 +77,7 @@ consolidada <- consolidada %>%
   group_by(ano) %>%
   mutate(
     taxa_hosp_100k_quartile =
-      ntile(desc(taxa_hosp_100k), 4)
+      ntile(taxa_hosp_100k, 4)
   ) %>%
   ungroup()
 ```
@@ -185,7 +185,7 @@ consolidada <- consolidada %>%
   group_by(ano) %>%
   mutate(
     sih_cfr_quartile =
-      ntile(desc(sih_cfr), 4)
+      ntile(sih_cfr, 4)
   ) %>%
   ungroup()
 ```

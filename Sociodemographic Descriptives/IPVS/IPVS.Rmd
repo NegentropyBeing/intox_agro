@@ -67,7 +67,7 @@ mean(ipvs$ipvs_high)
 
 ipvs <- ipvs |>
   mutate(
-    ipvs_high_quartile = ntile(desc(ipvs_high), 4))
+    ipvs_high_quartile = ntile(ipvs_high, 4))
 ```
 
 ### Table

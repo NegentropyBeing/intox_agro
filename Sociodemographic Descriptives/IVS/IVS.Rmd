@@ -97,7 +97,8 @@ median(ivs_clean$ivs_renda_e_trabalho)
 ```{r}
 ivs_clean <- ivs_clean |>
   mutate(
-    ivs_renda_e_trabalho_quartile = ntile(desc(ivs_renda_e_trabalho), 4))
+    ivs_renda_e_trabalho_quartile = ntile(ivs_renda_e_trabalho, 4))
+    
 ```
 
 ### Distribution
@@ -176,7 +177,7 @@ median(ivs_clean$renda_per_capita)
 ```{r}
 ivs_clean <- ivs_clean |>
   mutate(
-    renda_per_capita_quartile = ntile(desc(renda_per_capita), 4))
+    renda_per_capita_quartile = ntile(renda_per_capita, 4))
 ```
 
 ### Distribution
@@ -255,7 +256,7 @@ median(ivs_clean$i_gini)
 ```{r}
 ivs_clean <- ivs_clean |>
   mutate(
-    i_gini_quartile = ntile(desc(i_gini), 4))
+    i_gini_quartile = ntile(i_gini, 4))
 ```
 
 ### Distribution
@@ -336,7 +337,7 @@ median(ivs_clean$t_analf_15m)
 ```{r}
 ivs_clean <- ivs_clean |>
   mutate(
-    t_analf_15m_quartile = ntile(desc(t_analf_15m), 4))
+    t_analf_15m_quartile = ntile(t_analf_15m, 4))
 ```
 
 ### Distribution
@@ -415,7 +416,7 @@ median(ivs_clean$ivs_capital_humano)
 ```{r}
 ivs_clean <- ivs_clean |>
   mutate(
-    ivs_capital_humano_quartile = ntile(desc(ivs_capital_humano), 4))
+    ivs_capital_humano_quartile = ntile(ivs_capital_humano, 4))
 ```
 
 ### Distribution
@@ -496,7 +497,7 @@ median(ivs_clean$t_sem_agua_esgoto)
 ```{r}
 ivs_clean <- ivs_clean |>
   mutate(
-    t_sem_agua_esgoto_quartile = ntile(desc(t_sem_agua_esgoto), 4))
+    t_sem_agua_esgoto_quartile = ntile(t_sem_agua_esgoto, 4))
 ```
 
 ### Distribution
@@ -575,7 +576,7 @@ median(ivs_clean$t_sem_lixo)
 ```{r}
 ivs_clean <- ivs_clean |>
   mutate(
-    t_sem_lixo_quartile = ntile(desc(t_sem_lixo), 4))
+    t_sem_lixo_quartile = ntile(t_sem_lixo, 4))
 ```
 
 ### Distribution

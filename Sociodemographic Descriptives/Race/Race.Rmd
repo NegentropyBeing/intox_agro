@@ -80,11 +80,11 @@ Branca: no missing
 #create quartiles
 race <- race %>%
   mutate(
-    Branca_Q   = ntile(desc(pct_branca), 4),
-    Preta_Q    = ntile(desc(pct_preta), 4),
-    Amarela_Q  = ntile(desc(pct_amarela), 4),
-    Parda_Q    = ntile(desc(pct_parda), 4),
-    Indigena_Q = ntile(desc(`pct_indigena`), 4)
+    Branca_Q   = ntile(pct_branca, 4),
+    Preta_Q    = ntile(pct_preta, 4),
+    Amarela_Q  = ntile(pct_amarela, 4),
+    Parda_Q    = ntile(pct_parda, 4),
+    Indigena_Q = ntile(`pct_indigena`, 4)
   )
 
 #table 1
@@ -121,9 +121,9 @@ race <- race %>%
 #Make dataset with quartiles
 race_quartiles <- race %>%
   mutate(
-    Branca_Q   = ntile(desc(pct_branca), 4),
-    Other_Q    = ntile(desc(pct_other), 4),
-    Parda_Q    = ntile(desc(pct_parda), 4))
+    Branca_Q   = ntile(pct_branca, 4),
+    Other_Q    = ntile(pct_other, 4),
+    Parda_Q    = ntile(pct_parda, 4))
 
 write.csv(race_quartiles, "race_quartiles.csv", row.names = FALSE)
 
@@ -138,7 +138,7 @@ quartile_summary <- map_dfr(race_vars, function(var) {
     select(all_of(var)) %>%
     rename(value = all_of(var)) %>%
     mutate(
-      Quartile = ntile(desc(value), 4)
+      Quartile = ntile(value, 4)
     ) %>%
     group_by(Quartile) %>%
     summarise(
