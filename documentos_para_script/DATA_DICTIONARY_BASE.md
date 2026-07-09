@@ -4,7 +4,7 @@
 **Script:** `Scripts/08_build_consolidated_base.R`
 **Grain:** one row per municipality × year
 **Rows:** 7,095 (645 municipalities × 11 years, 2014–2024)
-**Columns:** 59
+**Columns:** 70
 
 Variable groups can be included or excluded before saving by editing the `vars_*` vectors
 in Part 7 of `08_build_consolidated_base.R`.
@@ -16,7 +16,7 @@ in Part 7 of `08_build_consolidated_base.R`.
 | # | Variable | Type | Description |
 |---|---|---|---|
 | 1 | `cod_ibge` | character | 6-digit IBGE municipality code — primary join key across all project files |
-| 2 | `nome_municipio` | character | Municipality name (IBGE canonical via geobr, e.g. `"Campinas"`) — present for all 645 municipalities |
+| 2 | `nome_municipio` | character | Municipality name (IBGE canonical via SIDRA T9606, e.g. `"Campinas"`) — present for all 645 municipalities |
 | 3 | `ano` | integer | Calendar year (2014–2024) |
 
 ---
@@ -34,7 +34,7 @@ Source: aggregated from `resultados/contextual/populacao_sp_municipio_ano.parque
 | 4 | `pop_total` | integer | Total estimated population |
 | 5 | `pop_masculino` | integer | Male population |
 | 6 | `pop_feminino` | integer | Female population |
-| 7 | `pop_0_14` | integer | Population aged 0–14 |
+| 7 | `pop_0_14` | integer | Population aged 0–14 (denominator for the pediatric rates below) |
 | 8 | `pop_15_64` | integer | Population aged 15–64 |
 | 9 | `pop_65plus` | integer | Population aged 65 and older |
 
@@ -46,28 +46,42 @@ Municipalities with no recorded events are set to **0**, not NA.
 
 Source: `resultados/SIH/`, `resultados/SINAN/`, `resultados/SIM/`
 
+> **Pediatric (0–14) counts.** The `*_0_14` variables restrict each outcome to patients
+> aged 0–14, using the age fields kept in the individual-level files. Age coding differs by
+> system: SIH uses `COD_IDADE` ("Dias"/"Meses" = infants under 1 year, "Anos" = age in
+> `IDADE`; "Centena de anos" = 100+, excluded); SINAN uses the DATASUS coded age
+> `NU_IDADE_N` (values ≤ 4014 = ages 0–14); SIM uses the decoded `IDADEanos`. The all-ages
+> columns are retained unchanged alongside them.
+
 | # | Variable | Type | Description |
 |---|---|---|---|
 | 10 | `sih_n_hosp` | integer | Hospital admissions for exogenous intoxication (ICD T36–T65, X40–X49, X60–X69, Y10–Y19), by patient's municipality of residence |
-| 11 | `sih_n_hosp_t60` | integer | Hospital admissions specifically for pesticide poisoning (ICD T60) |
-| 12 | `sih_n_obitos_hosp` | integer | In-hospital deaths among intoxication admissions |
-| 13 | `sih_dias_perm_media` | double | Mean length of hospital stay (days); `NA` if no admissions that year |
-| 14 | `sinan_n_notif` | integer | Compulsory poisoning notifications (SINAN IEXO form) |
-| 15 | `sinan_n_notif_agric` | integer | Notifications with agricultural context (`LAVOURA` field non-empty) — proxy for agricultural pesticide exposure |
-| 16 | `sinan_n_obitos` | integer | Fatal notifications (EVOLUCAO == "2": death attributable to the notified intoxication) |
-| 17 | `sim_n_obitos` | integer | Deaths from exogenous intoxication (death certificates, same ICD ranges as SIH) |
+| 11 | `sih_n_hosp_0_14` | integer | Hospital admissions among patients aged 0–14 |
+| 12 | `sih_n_hosp_t60` | integer | Hospital admissions specifically for pesticide poisoning (ICD T60) |
+| 13 | `sih_n_obitos_hosp` | integer | In-hospital deaths among intoxication admissions |
+| 14 | `sih_dias_perm_media` | double | Mean length of hospital stay (days); `NA` if no admissions that year |
+| 15 | `sinan_n_notif` | integer | Compulsory poisoning notifications (SINAN IEXO form) |
+| 16 | `sinan_n_notif_0_14` | integer | Notifications among patients aged 0–14 |
+| 17 | `sinan_n_notif_agric` | integer | Notifications with agricultural context (`LAVOURA` field non-empty) — proxy for agricultural pesticide exposure |
+| 18 | `sinan_n_obitos` | integer | Fatal notifications (EVOLUCAO == "2": death attributable to the notified intoxication) |
+| 19 | `sim_n_obitos` | integer | Deaths from exogenous intoxication (death certificates, same ICD ranges as SIH) |
+| 20 | `sim_n_obitos_0_14` | integer | Deaths among individuals aged 0–14 |
 
 ---
 
 ## Health outcomes — crude rates per 100,000 population
 
-Derived from counts above divided by `pop_total`. `NA` if `pop_total` is missing.
+All-age rates (18–20) divide the count by `pop_total`. Pediatric rates (21–23) divide the
+0–14 count by `pop_0_14`. `NA` if the denominator is missing.
 
 | # | Variable | Type | Description |
 |---|---|---|---|
-| 18 | `taxa_hosp_100k` | double | SIH hospitalisations per 100,000 inhabitants |
-| 19 | `taxa_notif_100k` | double | SINAN notifications per 100,000 inhabitants |
-| 20 | `taxa_obitos_sim_100k` | double | SIM deaths per 100,000 inhabitants |
+| 21 | `taxa_hosp_100k` | double | SIH hospitalisations per 100,000 inhabitants (all ages) |
+| 22 | `taxa_notif_100k` | double | SINAN notifications per 100,000 inhabitants (all ages) |
+| 23 | `taxa_obitos_sim_100k` | double | SIM deaths per 100,000 inhabitants (all ages) |
+| 24 | `taxa_hosp_0_14_100k` | double | SIH hospitalisations per 100,000 population aged 0–14 |
+| 25 | `taxa_notif_0_14_100k` | double | SINAN notifications per 100,000 population aged 0–14 |
+| 26 | `taxa_obitos_sim_0_14_100k` | double | SIM deaths per 100,000 population aged 0–14 |
 
 ---
 
@@ -80,10 +94,10 @@ absence of monitoring is distinct from absence of contamination.
 
 | # | Variable | Type | Description |
 |---|---|---|---|
-| 21 | `sisagua_n_amostras` | integer | Total water samples tested for pesticides |
-| 22 | `sisagua_n_amostras_detect` | integer | Samples with at least one quantifiable pesticide detection (`TIPO_RESULTADO == "NUMERICO"`) |
-| 23 | `sisagua_n_pesticidas_detect` | integer | Number of distinct pesticide compounds detected in quantifiable amounts |
-| 24 | `sisagua_pct_deteccao` | double | Percentage of samples with a quantifiable detection (0–100) |
+| 27 | `sisagua_n_amostras` | integer | Total water samples tested for pesticides |
+| 28 | `sisagua_n_amostras_detect` | integer | Samples with at least one quantifiable pesticide detection (`TIPO_RESULTADO == "NUMERICO"`) |
+| 29 | `sisagua_n_pesticidas_detect` | integer | Number of distinct pesticide compounds detected in quantifiable amounts |
+| 30 | `sisagua_pct_deteccao` | double | Percentage of samples with a quantifiable detection (0–100) |
 
 ---
 
@@ -93,8 +107,8 @@ Source: `resultados/PROD_AGRO/pam_municipio_produto_ano.parquet` (rows where `pr
 
 | # | Variable | Type | Description |
 |---|---|---|---|
-| 25 | `pam_area_colhida_ha` | double | Total harvested area across all crops (hectares) |
-| 26 | `pam_valor_prod_mil_reais` | double | Total agricultural production value, all crops (thousands BRL, current prices) |
+| 31 | `pam_area_colhida_ha` | double | Total harvested area across all crops (hectares) |
+| 32 | `pam_valor_prod_mil_reais` | double | Total agricultural production value, all crops (thousands BRL, current prices) |
 
 ---
 
@@ -108,10 +122,10 @@ annual totals for those years are underestimates. See `METHODS.md §11` for the 
 
 | # | Variable | Type | Description |
 |---|---|---|---|
-| 27 | `caged_admissoes_agro` | integer | Formal agricultural admissions (CNAE division 01) |
-| 28 | `caged_desligamentos_agro` | integer | Formal agricultural dismissals |
-| 29 | `caged_saldo_liquido_agro` | integer | Net employment balance (admissions − dismissals) |
-| 30 | `caged_movimentos_total_agro` | integer | Total movements (admissions + dismissals + transfers) |
+| 33 | `caged_admissoes_agro` | integer | Formal agricultural admissions (CNAE division 01) |
+| 34 | `caged_desligamentos_agro` | integer | Formal agricultural dismissals |
+| 35 | `caged_saldo_liquido_agro` | integer | Net employment balance (admissions − dismissals) |
+| 36 | `caged_movimentos_total_agro` | integer | Total movements (admissions + dismissals + transfers) |
 
 ---
 
@@ -124,10 +138,10 @@ the same value is repeated across all years in the base.
 
 | # | Variable | Type | Description |
 |---|---|---|---|
-| 31 | `censo_uso_total_estab` | double | Total agricultural establishments in the municipality |
-| 32 | `censo_pct_uso_agrotox` | double | % of establishments that used pesticides (0–100) |
-| 33 | `censo_valor_agrotox_mil` | double | Municipal pesticide spending (thousands BRL, 2017 prices) |
-| 34 | `censo_valor_total_mil` | double | Total agricultural spending (thousands BRL, 2017 prices) |
+| 37 | `censo_uso_total_estab` | double | Total agricultural establishments in the municipality |
+| 38 | `censo_pct_uso_agrotox` | double | % of establishments that used pesticides (0–100) |
+| 39 | `censo_valor_agrotox_mil` | double | Municipal pesticide spending (thousands BRL, 2017 prices) |
+| 40 | `censo_valor_total_mil` | double | Total agricultural spending (thousands BRL, 2017 prices) |
 
 ---
 
@@ -146,19 +160,19 @@ Single cross-section (Census 2010). Same value repeated across all years.
 
 | # | Variable | Type | Description |
 |---|---|---|---|
-| 35 | `ivs` | double | Overall Social Vulnerability Index (0 = low vulnerability, 1 = high) |
-| 36 | `ivs_infraestrutura_urbana` | double | Urban infrastructure sub-index |
-| 37 | `ivs_capital_humano` | double | Human capital sub-index |
-| 38 | `ivs_renda_e_trabalho` | double | Income and labour sub-index |
-| 39 | `renda_per_capita` | double | Per-capita income (BRL, Census 2010) |
-| 40 | `i_gini` | double | Gini coefficient |
-| 41 | `t_analf_15m` | double | Adult illiteracy rate — population aged 15 and over (%) |
-| 42 | `t_sem_agua_esgoto` | double | % households without piped water or sewage connection |
-| 43 | `t_sem_lixo` | double | % households without garbage collection |
-| 44 | `t_densidadem2` | double | % households with more than 2 persons per bedroom |
-| 45 | `t_mort1` | double | Infant mortality rate (deaths per 1,000 live births) |
-| 46 | `espvida` | double | Life expectancy at birth (years) |
-| 47 | `t_razdep` | double | Age dependency ratio |
+| 41 | `ivs` | double | Overall Social Vulnerability Index (0 = low vulnerability, 1 = high) |
+| 42 | `ivs_infraestrutura_urbana` | double | Urban infrastructure sub-index |
+| 43 | `ivs_capital_humano` | double | Human capital sub-index |
+| 44 | `ivs_renda_e_trabalho` | double | Income and labour sub-index |
+| 45 | `renda_per_capita` | double | Per-capita income (BRL, Census 2010) |
+| 46 | `i_gini` | double | Gini coefficient |
+| 47 | `t_analf_15m` | double | Adult illiteracy rate — population aged 15 and over (%) |
+| 48 | `t_sem_agua_esgoto` | double | % households without piped water or sewage connection |
+| 49 | `t_sem_lixo` | double | % households without garbage collection |
+| 50 | `t_densidadem2` | double | % households with more than 2 persons per bedroom |
+| 51 | `t_mort1` | double | Infant mortality rate (deaths per 1,000 live births) |
+| 52 | `espvida` | double | Life expectancy at birth (years) |
+| 53 | `t_razdep` | double | Age dependency ratio |
 
 
 ---
@@ -172,9 +186,9 @@ Scale is standardised (mean ≈ 0, negative = less deprived).
 
 | # | Variable | Type | Description |
 |---|---|---|---|
-| 48 | `ibp_deprivation_mean` | double | Population-weighted mean deprivation score across census tracts |
-| 49 | `ibp_deprivation_median` | double | Median deprivation score across census tracts |
-| 50 | `ibp_pct_urban` | double | % of census tracts classified as urban |
+| 54 | `ibp_deprivation_mean` | double | Population-weighted mean deprivation score across census tracts |
+| 55 | `ibp_deprivation_median` | double | Median deprivation score across census tracts |
+| 56 | `ibp_pct_urban` | double | % of census tracts classified as urban |
 
 ---
 
@@ -187,12 +201,12 @@ The six groups are mutually exclusive and exhaustive — their percentages sum t
 
 | # | Variable | Type | Description |
 |---|---|---|---|
-| 51 | `ipvs_pct_grupo1` | double | % households classified as **very low vulnerability** |
-| 52 | `ipvs_pct_grupo2` | double | % households classified as **low vulnerability** |
-| 53 | `ipvs_pct_grupo3` | double | % households classified as **medium-low vulnerability** |
-| 54 | `ipvs_pct_grupo4` | double | % households classified as **medium vulnerability** |
-| 55 | `ipvs_pct_grupo5` | double | % households classified as **high vulnerability** |
-| 56 | `ipvs_pct_grupo6` | double | % households classified as **very high vulnerability** |
+| 57 | `ipvs_pct_grupo1` | double | % households classified as **very low vulnerability** |
+| 58 | `ipvs_pct_grupo2` | double | % households classified as **low vulnerability** |
+| 59 | `ipvs_pct_grupo3` | double | % households classified as **medium-low vulnerability** |
+| 60 | `ipvs_pct_grupo4` | double | % households classified as **medium vulnerability** |
+| 61 | `ipvs_pct_grupo5` | double | % households classified as **high vulnerability** |
+| 62 | `ipvs_pct_grupo6` | double | % households classified as **very high vulnerability** |
 
 ---
 
@@ -205,16 +219,34 @@ Municipalities that are 100% urban have `pop_rur_2022 == NA` and `pct_rural_2022
 
 | # | Variable | Type | Description |
 |---|---|---|---|
-| 57 | `pop_urb_2022` | integer | Urban population (Census 2022) |
-| 58 | `pop_rur_2022` | integer | Rural population (Census 2022); `NA` for fully urban municipalities |
-| 59 | `pct_rural_2022` | double | % of population living in rural areas (0–100) |
+| 63 | `pop_urb_2022` | integer | Urban population (Census 2022) |
+| 64 | `pop_rur_2022` | integer | Rural population (Census 2022); `NA` for fully urban municipalities |
+| 65 | `pct_rural_2022` | double | % of population living in rural areas (0–100) |
+
+---
+
+## Fixed covariate — Racial composition (IBGE Census 2022, SIDRA T9606)
+
+Source: `resultados/contextual/pop_raca_cor_sp_2022.parquet`
+
+Single cross-section (Census 2022). Same value repeated across all years.
+The five categories follow IBGE's self-declared colour/race classification and sum to ~100 per municipality.
+
+| # | Variable | Type | Description |
+|---|---|---|---|
+| 66 | `pct_branca` | double | % population self-declared White |
+| 67 | `pct_preta` | double | % population self-declared Black |
+| 68 | `pct_amarela` | double | % population self-declared Yellow/Asian |
+| 69 | `pct_parda` | double | % population self-declared Mixed-race (Parda) |
+| 70 | `pct_indigena` | double | % population self-declared Indigenous |
 
 ---
 
 ## Notes for analysts
 
 - **Join key:** `cod_ibge` (6-digit IBGE code) joins this base with all other project files.
-- **Fixed covariates:** Censo Agro (2017), IVS, IBP, and IPVS (all 2010) are time-invariant — the same value repeats for every year in the base. Do not interpret year-to-year variation for these variables.
+- **Fixed covariates:** Censo Agro (2017), IVS, IBP, IPVS (all 2010), and the Urban/Rural and racial-composition splits (2022) are time-invariant — the same value repeats for every year in the base. Do not interpret year-to-year variation for these variables.
+- **Pediatric (0–14) outcomes:** the `*_0_14` counts and their `taxa_*_0_14_100k` rates restrict to ages 0–14, using `pop_0_14` as the denominator. Use these — not the all-age `taxa_*_100k` — for any analysis limited to the 0–14 age group.
 - **SISAGUA NAs:** municipalities without water monitoring records have `NA` in all `sisagua_*` columns. Consider whether to impute, exclude, or model the missingness mechanism.
 - **CAGED underestimation:** annual CAGED totals for 2014–2019 are underestimates due to missing months. Use with caution for trend analyses across the 2019→2020 format change.
-- **Crude rates vs. adjusted rates:** `taxa_*` are crude rates. For age-standardised or sex-stratified rates, use the individual-level files in `resultados/SIH/`, `resultados/SINAN/`, `resultados/SIM/` combined with `pop_total` disaggregated by age/sex from `resultados/contextual/populacao_sp_municipio_ano.parquet`.
+- **Crude rates vs. adjusted rates:** `taxa_*` are crude rates. For age-standardised or sex-stratified rates, use the individual-level files in `resultados/SIH/`, `resultados/SINAN/`, `resultados/SIM/` combined with population disaggregated by age/sex from `resultados/contextual/populacao_sp_municipio_ano.parquet`.
