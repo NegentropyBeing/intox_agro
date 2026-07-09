@@ -604,3 +604,26 @@ ggplot(consolidada, aes(x = pam_valor_prod_mil_reais)) +
   geom_histogram(bins = 30) +
   theme_minimal()
 ```
+
+#### Save Dataset
+
+```{r}
+agricultural_gis <- consolidada %>%
+  select(
+    cod_ibge,
+    sisagua_pct_deteccao_quartile,
+    sisagua_n_pesticidas_detect_quartile,
+    pam_area_colhida_ha_quartile,
+    pam_valor_prod_mil_reais_quartile
+  )
+
+
+#save separate dataset per year
+
+for (yr in 2014:2024) {
+  consolidada %>%
+    filter(ano == yr) %>%
+    write_csv(paste0("agricultural_", yr, ".csv"))
+}
+
+```

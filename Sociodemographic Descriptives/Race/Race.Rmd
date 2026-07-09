@@ -125,6 +125,7 @@ race_quartiles <- race %>%
     Other_Q    = ntile(pct_other, 4),
     Parda_Q    = ntile(pct_parda, 4))
 
+#save
 write.csv(race_quartiles, "race_quartiles.csv", row.names = FALSE)
 
 ```
