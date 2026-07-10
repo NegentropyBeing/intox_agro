@@ -447,7 +447,7 @@ incidence_quartiles
 
 13. Quartile summary by year 
 ```{r}
-incidence_quartiles_by_year <- quantile_summary_by_year(
+incidence_quartiles_by_year <- quartile_summary_by_year(
   data = analysis_df,
   variable = incidence_100k,
   year_var = ano,

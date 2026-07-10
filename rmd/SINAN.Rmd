@@ -16,7 +16,7 @@ This is an R Markdown document. Markdown is a simple formatting syntax for autho
 When you click the **Knit** button a document will be generated that includes both content as well as the output of any embedded R code chunks within the document. You can embed an R code chunk like this:
 
 ```{r}
-install.packages(c("tidyverse", "janitor", "lubridate", "naniar", "skimr", "knitr", "kableExtra", "scales"))
+install.packages(c("tidyverse", "janitor", "lubridate", "naniar", "skimr", "knitr", "kableExtra", "scales","sf","geobr","viridis","leaflet","htmlwidgets"))
 ```
 
 
@@ -38,6 +38,12 @@ library(lubridate)
 library(naniar)
 library(skimr)
 library(kableExtra)
+library(sf)
+library(geobr)
+library(viridis)
+library(leaflet)
+library(htmlwidgets)
+
 
 theme_set(theme_minimal())
 ```
@@ -357,4 +363,232 @@ top10_municipalities %>%
   ) +
   theme_minimal()
 
+```
+
+
+
+---------------------------------------------
+Maps for SINAN Data - Pesticide Notifications
+---------------------------------------------
+
+```{r}
+# Read shapefile
+sp_municipios <- st_read("/Users/abiramisomasundaram/Desktop/Brazil pesticides/Workspace/SHAPEFILES FOR MAPS-SAO PAULO BRAZIL/SP_Municipios_2025_with 6 digit/SP_Municipios_2025/SP_Municipios_2025.shp")
+
+pop_df <- read_parquet("/Users/abiramisomasundaram/Desktop/Brazil pesticides/Data/Dados Version 2/Dados/resultados/contextual/populacao_sp_municipio_ano.parquet")
+
+# Clean shapefile
+sp_municipios_clean <- sp_municipios %>%
+  mutate(
+    muni_code = as.character(COD_6),
+    muni_code = str_trim(muni_code),
+    muni_name = as.character(NM_MUN)
+  ) %>%
+  st_make_valid()
+```
+Annual Pesticide Notification Count from exsisting df
+```{r}
+yearly_notifications <- df %>%
+  mutate(
+    muni_code = as.character(id_mn_resi),
+    muni_code = str_trim(muni_code),
+    year = as.integer(nu_ano_num)
+  ) %>%
+  filter(
+    !is.na(muni_code),
+    muni_code != "",
+    !is.na(year)
+  ) %>%
+  count(muni_code, year, name = "n_notifications")
+
+years_available <- sort(unique(yearly_notifications$year))
+
+```
+
+Clean population data
+
+```{r}
+population_clean <- pop_df %>%
+  mutate(
+    muni_code = as.character(cod_ibge),
+    muni_code = str_trim(muni_code),
+    year = as.integer(ano),
+    populacao = as.numeric(populacao)
+  ) %>%
+  group_by(muni_code, year) %>%
+  summarise(
+    population = sum(populacao, na.rm = TRUE),
+    .groups = "drop"
+  )
+
+```
+
+# Municipality-year grid
+```{r}
+
+municipality_year_grid <- expand_grid(
+  muni_code = sp_municipios_clean$muni_code,
+  year = years_available
+)
+
+```
+
+# Calculate rates
+```{r}
+yearly_rates <- municipality_year_grid %>%
+  left_join(yearly_notifications, by = c("muni_code", "year")) %>%
+  left_join(population_clean, by = c("muni_code", "year")) %>%
+  mutate(
+    n_notifications = replace_na(n_notifications, 0),
+    notification_rate_100k = if_else(
+      !is.na(population) & population > 0,
+      100000 * n_notifications / population,
+      NA_real_
+    )
+  )
+```
+
+# Join to shapefile
+```{r}
+
+sp_map_yearly_rates <- sp_municipios_clean %>%
+  left_join(yearly_rates, by = "muni_code") %>%
+  st_transform(4326)
+
+```
+
+# Create Rate Categories
+```{r}
+# Create rate categories
+sp_map_yearly_rates <- sp_map_yearly_rates %>%
+  mutate(
+    rate_category = cut(
+      notification_rate_100k,
+      breaks = c(-Inf, 0, 1, 5, 10, 25, 50, 100, Inf),
+      labels = c(
+        "0",
+        ">0–1",
+        ">1–5",
+        ">5–10",
+        ">10–25",
+        ">25–50",
+        ">50–100",
+        ">100"
+      ),
+      right = TRUE
+    )
+  )
+```
+
+
+# Static Maps 
+```{r}
+# Years to show
+selected_years <- c(2014, 2017, 2021, 2024)
+
+# Make sure year is numeric/integer
+sp_map_selected_proj <- sp_map_yearly_rates %>%
+  mutate(year = as.integer(year)) %>%
+  filter(year %in% selected_years) %>%
+  st_transform(5880)
+
+#Rate Categories
+sp_map_selected_proj <- sp_map_selected_proj %>%
+  mutate(
+    rate_category = cut(
+      notification_rate_100k,
+      breaks = c(-Inf, 0, 1, 5, 10, 25, 50, 100, Inf),
+      labels = c(
+        "0",
+        ">0–1",
+        ">1–5",
+        ">5–10",
+        ">10–25",
+        ">25–50",
+        ">50–100",
+        ">100"
+      ),
+      right = TRUE
+    )
+  )
+#labels the municipality with the highest rate in each selected year.
+label_data <- sp_map_selected_proj %>%
+  filter(
+    !is.na(notification_rate_100k),
+    n_notifications >= 5
+  ) %>%
+  group_by(year) %>%
+  slice_max(notification_rate_100k, n = 1, with_ties = FALSE) %>%
+  ungroup() %>%
+  mutate(
+    label_text = paste0(
+      muni_name,
+      "\nRate: ",
+      round(notification_rate_100k, 1),
+      " per 100k",
+      "\nn = ",
+      n_notifications
+    )
+  ) %>%
+  st_point_on_surface()
+
+
+```
+
+
+ 
+# Hot colour palette
+
+```{r}
+rate_map_selected_blue <- ggplot(sp_map_selected_proj) +
+  geom_sf(
+    aes(fill = rate_category),
+    color = "white",
+    linewidth = 0.05
+  ) +
+  geom_sf_label(
+    data = label_data,
+    aes(label = label_text),
+    size = 3,
+    label.size = 0.15,
+    fill = "white",
+    alpha = 0.9,
+    lineheight = 0.9
+  ) +
+  facet_wrap(~ year, ncol = 2) +
+  scale_fill_manual(
+    values = c(
+      "0" = "#FFFFFF",
+      ">0–1" = "#EFF3FF",
+      ">1–5" = "#C6DBEF",
+      ">5–10" = "#9ECAE1",
+      ">10–25" = "#6BAED6",
+      ">25–50" = "#3182BD",
+      ">50–100" = "#08519C",
+      ">100" = "#08306B"
+    ),
+    na.value = "grey80",
+    drop = FALSE
+  ) +
+  labs(
+    title = "Pesticide notification rates by municipality",
+    subtitle = "State of São Paulo, Brazil",
+    fill = "Notifications\nper 100,000",
+    caption = "Rates calculated as annual pesticide notifications per 100,000 municipal residents. Label shows the highest-rate municipality in each year."
+  ) +
+  theme_minimal(base_size = 12) +
+  theme(
+    axis.text = element_blank(),
+    axis.ticks = element_blank(),
+    axis.title = element_blank(),
+    panel.grid = element_blank(),
+    strip.text = element_text(face = "bold", size = 13),
+    legend.position = "right",
+    legend.title = element_text(face = "bold"),
+    plot.title = element_text(face = "bold", size = 16),
+    plot.subtitle = element_text(size = 12),
+    plot.caption = element_text(size = 9)
+  )
+
+rate_map_selected_blue
 ```
