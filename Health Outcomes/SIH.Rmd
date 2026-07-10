@@ -52,6 +52,17 @@ SIH_clean <- SIH |>
 
 ```{r}
 consolidada <- read_parquet("~/GitHub/intox_agro/resultados/base_consolidada_sp_2014_2024.parquet")
+
+#subset
+poisoning <- consolidada |>
+  select(cod_ibge,
+         ano,
+         sih_n_hosp_0_14,
+         sinan_n_notif_0_14,
+         sim_n_obitos_0_14,
+         taxa_hosp_0_14_100k,
+         taxa_notif_0_14_100k,
+         taxa_obitos_sim_0_14_100k)
 ```
 
 # Hospitalization per 100K
@@ -59,25 +70,25 @@ consolidada <- read_parquet("~/GitHub/intox_agro/resultados/base_consolidada_sp_
 #### Missing
 
 ```{r}
-plot_missing(consolidada[, c("taxa_hosp_100k")])
+plot_missing(poisoning[, c("taxa_hosp_0_14_100k")])
 ```
 
 ### Raw Frequency
 
 ```{r}
-median(consolidada$taxa_hosp_100k)
+median(poisoning$taxa_hosp_0_14_100k)
 
-mean(consolidada$taxa_hosp_100k)
+mean(poisoning$taxa_hosp_0_14_100k)
 ```
 
 #### Create Quartiles
 
 ```{r}
-consolidada <- consolidada %>%
+poisoning <- poisoning %>%
   group_by(ano) %>%
   mutate(
-    taxa_hosp_100k_quartile =
-      ntile(taxa_hosp_100k, 4)
+    taxa_hosp_0_14_100k_quartile =
+      ntile(taxa_hosp_0_14_100k, 4)
   ) %>%
   ungroup()
 ```
@@ -86,15 +97,15 @@ consolidada <- consolidada %>%
 
 ```{r}
 
-poisoning_summary <- consolidada %>%
+poisoning_summary <- poisoning %>%
   select(
     ano,
-    taxa_hosp_100k,
-    taxa_hosp_100k_quartile
+    taxa_hosp_0_14_100k,
+    taxa_hosp_0_14_100k_quartile
   ) %>%
   rename(
-    value = taxa_hosp_100k,
-    Quartile = taxa_hosp_100k_quartile
+    value = taxa_hosp_0_14_100k,
+    Quartile = taxa_hosp_0_14_100k_quartile
   ) %>%
   group_by(ano, Quartile) %>%
   summarise(
@@ -140,13 +151,19 @@ ggplot(poisoning_summary,
   scale_x_continuous(
     breaks = unique(sort(poisoning_summary$ano))
   ) +
+  labs(
+    title = "Hospitalization Rate Ages 0-14 years per 100K",
+    x = "Year",
+    y = "Median Hospitalization Rate per 100K",
+    color = "Quartile"
+  ) +
   theme_minimal()
 ```
 
 ## Normality
 
 ```{r}
-ggplot(consolidada, aes(x = taxa_hosp_100k)) +
+ggplot(poisoning, aes(x = taxa_hosp_0_14_100k)) +
   geom_histogram(bins = 30) +
   theme_minimal()
 ```
@@ -157,31 +174,31 @@ ggplot(consolidada, aes(x = taxa_hosp_100k)) +
 
 ```{r}
 
-consolidada <- consolidada %>%
+poisoning <- poisoning %>%
   mutate(
-    sih_cfr = if_else(sih_n_hosp > 0,
-                      (sih_n_obitos_hosp / sih_n_hosp) * 100,
+    sih_cfr = if_else(sih_n_hosp_0_14 > 0,
+                      (sih_n_obitos_hosp / sih_n_hosp_0_14) * 100,
                       NA_real_))
 ```
 
 #### Missing
 
 ```{r}
-plot_missing(consolidada[, c("sih_cfr")])
+plot_missing(poisoning[, c("sih_cfr")])
 ```
 
 ### Raw Frequency
 
 ```{r}
-median(consolidada$sih_cfr, na.rm = TRUE)
+median(poisoning$sih_cfr, na.rm = TRUE)
 
-mean(consolidada$sih_cfr, na.rm = TRUE)
+mean(poisoning$sih_cfr, na.rm = TRUE)
 ```
 
 #### Create Quartiles
 
 ```{r}
-consolidada <- consolidada %>%
+poisoning <- poisoning %>%
   group_by(ano) %>%
   mutate(
     sih_cfr_quartile =
@@ -193,7 +210,7 @@ consolidada <- consolidada %>%
 ## Table
 
 ```{r}
-fatality_summary <- consolidada %>%
+fatality_summary <- poisoning %>%
   select(
     ano,
     sih_cfr,
@@ -254,7 +271,14 @@ ggplot(fatality_summary,
 ## Normality
 
 ```{r}
-ggplot(consolidada, aes(x = sih_cfr)) +
+ggplot(poisoning, aes(x = sih_cfr)) +
   geom_histogram(bins = 30) +
   theme_minimal()
+```
+
+#### Save dataset for mapping
+
+```{r}
+write.csv(poisoning, "poisoning.csv", row.names = FALSE)
+
 ```
