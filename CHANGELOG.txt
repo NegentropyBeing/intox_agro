@@ -7,6 +7,47 @@ previous packaged version (dados_current-*.zip).
 
 
 ----------------------------------------------------------------
+Version: 2026-07-10
+----------------------------------------------------------------
+
+Focus: pediatric in-hospital case fatality + interactive dashboard.
+
+SCRIPTS
+  - 08_build_consolidated_base.R: added the 0-14 in-hospital death
+    count and in-hospital case-fatality rates (all ages and 0-14).
+    Age 0-14 is now flagged once (is_0_14) in the SIH aggregation
+    and reused for both the admission and death counts.
+
+NEW COLUMNS IN THE CONSOLIDATED BASE (3)  ->  70 to 73 variables
+  - sih_n_obitos_hosp_0_14         (in-hospital deaths, ages 0-14)
+  - taxa_letalidade_hosp           (case fatality %, all ages)
+  - taxa_letalidade_hosp_0_14      (case fatality %, ages 0-14)
+    Case fatality = deaths among admissions x 100; NA when there
+    were no admissions.
+
+DASHBOARD (new)
+  - dashboard/: local Shiny app (app.R) to explore the data —
+    an aggregated municipal overview (choropleth map, time series,
+    ranking, KPIs, table) and a microdata drill (SIH/SINAN/SIM/
+    SISAGUA, lazy arrow filtering). Reads only resultados/; no
+    server, no network at runtime. setup_geo.R caches the SP map
+    geometry once (dashboard/data/sp_munis.rds). See dashboard/README.md.
+
+DOCUMENTATION
+  - DATA_DICTIONARY_BASE.md: documented the 3 new variables,
+    renumbered (now 73), and added a note that case fatality is
+    per municipality-year (pool counts for aggregate rates).
+
+DATA NOTE
+  - In-hospital deaths, ages 0-14: 88 of 14,384 admissions
+    (case fatality 0.61%); all ages 2,505 of 76,527 (3.27%).
+
+OUTPUT IMPACT
+  - resultados/base_consolidada_sp_2014_2024.parquet: 70 -> 73
+    variables. All previously existing columns and values unchanged.
+
+
+----------------------------------------------------------------
 Version: 2026-07-09
 ----------------------------------------------------------------
 
