@@ -58,21 +58,20 @@ cat("=== Aggregating health outcomes ===\n")
 sih_agg <- read_parquet("resultados/SIH/sih_iexo_sp_2014_2024.parquet") |>
   mutate(
     cod_ibge = as.character(MUNIC_RES),
-    ano      = as.integer(ANO_CMPT)
+    ano      = as.integer(ANO_CMPT),
+    # Age 0-14 flag. Age is decoded in this file: COD_IDADE is "Dias"/"Meses"
+    # (infants <1yr) or "Anos" (IDADE in years); "Centena de anos" (100+) excluded.
+    is_0_14  = COD_IDADE %in% c("Dias", "Meses") |
+               (COD_IDADE == "Anos" & suppressWarnings(as.integer(IDADE)) <= 14)
   ) |>
   group_by(cod_ibge, ano) |>
   summarise(
-    sih_n_hosp          = n(),
-    # Pediatric (0-14) count. Age is decoded in this file: COD_IDADE is
-    # "Dias"/"Meses" (all infants <1yr) or "Anos" (IDADE in years).
-    # "Centena de anos" (100+) is correctly excluded.
-    sih_n_hosp_0_14     = sum(
-      COD_IDADE %in% c("Dias", "Meses") |
-        (COD_IDADE == "Anos" & suppressWarnings(as.integer(IDADE)) <= 14),
-      na.rm = TRUE),
-    sih_n_hosp_t60      = sum(substr(DIAG_PRINC, 1, 3) == "T60", na.rm = TRUE),
-    sih_n_obitos_hosp   = sum(MORTE == "Sim", na.rm = TRUE),
-    sih_dias_perm_media = mean(suppressWarnings(as.numeric(DIAS_PERM)), na.rm = TRUE),
+    sih_n_hosp             = n(),
+    sih_n_hosp_0_14        = sum(is_0_14, na.rm = TRUE),
+    sih_n_hosp_t60         = sum(substr(DIAG_PRINC, 1, 3) == "T60", na.rm = TRUE),
+    sih_n_obitos_hosp      = sum(MORTE == "Sim", na.rm = TRUE),
+    sih_n_obitos_hosp_0_14 = sum(is_0_14 & MORTE == "Sim", na.rm = TRUE),
+    sih_dias_perm_media    = mean(suppressWarnings(as.numeric(DIAS_PERM)), na.rm = TRUE),
     .groups = "drop"
   )
 
@@ -295,7 +294,8 @@ base <- spine |>
 # Replace NA with 0 for count outcomes only
 # (municipalities with no recorded events are truly zero, not missing)
 count_vars <- c(
-  "sih_n_hosp", "sih_n_hosp_0_14", "sih_n_hosp_t60", "sih_n_obitos_hosp",
+  "sih_n_hosp", "sih_n_hosp_0_14", "sih_n_hosp_t60",
+  "sih_n_obitos_hosp", "sih_n_obitos_hosp_0_14",
   "sinan_n_notif", "sinan_n_notif_0_14", "sinan_n_notif_agric", "sinan_n_obitos",
   "sim_n_obitos", "sim_n_obitos_0_14",
   "sisagua_n_amostras", "sisagua_n_amostras_detect", "sisagua_n_pesticidas_detect"
@@ -312,7 +312,12 @@ base <- base |>
     # Pediatric (0-14) rates: 0-14 events over the 0-14 population denominator
     taxa_hosp_0_14_100k       = round(sih_n_hosp_0_14    / pop_0_14 * 100000, 2),
     taxa_notif_0_14_100k      = round(sinan_n_notif_0_14 / pop_0_14 * 100000, 2),
-    taxa_obitos_sim_0_14_100k = round(sim_n_obitos_0_14  / pop_0_14 * 100000, 2)
+    taxa_obitos_sim_0_14_100k = round(sim_n_obitos_0_14  / pop_0_14 * 100000, 2),
+    # In-hospital case fatality (%): deaths among admissions. NA if no admissions.
+    taxa_letalidade_hosp      = ifelse(sih_n_hosp > 0,
+                                       round(sih_n_obitos_hosp / sih_n_hosp * 100, 1), NA_real_),
+    taxa_letalidade_hosp_0_14 = ifelse(sih_n_hosp_0_14 > 0,
+                                       round(sih_n_obitos_hosp_0_14 / sih_n_hosp_0_14 * 100, 1), NA_real_)
   )
 
 cat("Full base assembled:", nrow(base), "rows ×", ncol(base), "columns\n\n")
@@ -345,6 +350,7 @@ vars_outcomes_count <- c(
   "sih_n_hosp_0_14",     # hospitalisations, ages 0-14 only
   "sih_n_hosp_t60",      # hospitalisations, pesticide-specific (ICD T60)
   "sih_n_obitos_hosp",   # in-hospital deaths from intoxication
+  "sih_n_obitos_hosp_0_14", # in-hospital deaths, ages 0-14 only
   "sih_dias_perm_media", # mean length of stay (days)
   "sinan_n_notif",       # poisoning notifications (SINAN IEXO)
   "sinan_n_notif_0_14",  # notifications, ages 0-14 only
@@ -360,7 +366,9 @@ vars_rates <- c(
   "taxa_obitos_sim_100k",      # SIM deaths per 100,000 (all ages)
   "taxa_hosp_0_14_100k",       # SIH hospitalisations per 100,000, ages 0-14
   "taxa_notif_0_14_100k",      # SINAN notifications per 100,000, ages 0-14
-  "taxa_obitos_sim_0_14_100k"  # SIM deaths per 100,000, ages 0-14
+  "taxa_obitos_sim_0_14_100k", # SIM deaths per 100,000, ages 0-14
+  "taxa_letalidade_hosp",      # in-hospital case fatality (%), all ages
+  "taxa_letalidade_hosp_0_14"  # in-hospital case fatality (%), ages 0-14
 )
 
 vars_sisagua <- c(
