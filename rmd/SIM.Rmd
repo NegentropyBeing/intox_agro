@@ -683,7 +683,7 @@ st_geometry(highest_mortality_points_proj) <- st_point_on_surface(
 
 
 #plot
-ggplot() +
+p_mortality_map -> ggplot() +
   # Municipality polygons with dark grey boundaries
   geom_sf(
     data = map_rate_0_14_proj,
@@ -740,6 +740,10 @@ ggplot() +
     plot.title = element_text(face = "bold"),
     legend.position = "right"
   )
+
+p_mortality_map
+
+
 
 ```
 
