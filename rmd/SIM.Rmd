@@ -26,7 +26,9 @@ library(scales)
 library(tidyverse)
 library(stringr)
 library(ggh4x)
-library(tidyverse)
+library(sf)
+library(viridis)
+library(forcats)
 ```
 
 ```{r read-data}
@@ -226,6 +228,554 @@ kable(
 )
 ```
 
+Analysis dataset for ages 0–14 only
+```{r}
+df_0_14 <- df_analysis |>
+  filter(!is.na(age_years), age_years >= 0, age_years <= 14) |>
+  mutate(
+    age_group = case_when(
+      age_years >= 0  & age_years <= 3  ~ "0-3",
+      age_years >= 4  & age_years <= 7  ~ "4-7",
+      age_years >= 8  & age_years <= 10 ~ "8-10",
+      age_years >= 11 & age_years <= 14 ~ "11-14",
+      TRUE ~ NA_character_
+    ),
+    age_group = factor(age_group, levels = c("0-3", "4-7", "8-10", "11-14"))
+  )
+
+```
+
+Deaths by race/ethnicity and age group
+
+```{r}
+df_0_14 |>
+  mutate(
+    RACACOR = if_else(
+      is.na(RACACOR) | str_squish(RACACOR) == "",
+      "Missing",
+      as.character(RACACOR)
+    )
+  ) |>
+  count(age_group, RACACOR) |>
+  ggplot(aes(x = age_group, y = n, fill = RACACOR)) +
+  geom_col(position = "fill") +
+  scale_y_continuous(labels = percent) +
+  scale_fill_brewer(palette = "Dark2") +
+  labs(
+    title = "Proportional distribution of race/ethnicity by age group",
+    x = "Age group",
+    y = "Percent within age group",
+    fill = "Race/ethnicity"
+  ) +
+  theme_minimal()
+```
+Deaths over time by year
+ 
+```{r}
+df_0_14 |>
+  filter(!is.na(death_year)) |>
+  count(death_year) |>
+  ggplot(aes(x = death_year, y = n)) +
+  geom_line(color = "#2F65A7", linewidth = 1) +
+  geom_point(color = "#2F65A7", size = 2) +
+  scale_x_continuous(breaks = pretty_breaks()) +
+  labs(
+    title = "Deaths among children aged 0-14 by year",
+    x = "Year of death",
+    y = "Number of deaths"
+  ) +
+  theme_minimal()
+
+```
+
+
+Deaths over time by year and age group
+```{r}
+df_0_14 |>
+  filter(!is.na(death_year), !is.na(age_group)) |>
+  count(death_year, age_group) |>
+  ggplot(aes(x = death_year, y = n, color = age_group)) +
+  geom_line(linewidth = 1) +
+  geom_point(size = 2) +
+  scale_x_continuous(breaks = pretty_breaks()) +
+  labs(
+    title = "Deaths among children aged 0-14 by year and age group",
+    x = "Year of death",
+    y = "Number of deaths",
+    color = "Age group"
+  ) +
+  theme_minimal()
+```
+
+Deaths by calendar quarter
+```{r}
+
+quarter_counts <- df_0_14 |>
+  filter(!is.na(death_calendar_quarter)) |>
+  count(death_calendar_quarter) |>
+  mutate(
+    year = str_extract(as.character(death_calendar_quarter), "\\d{4}"),
+    quarter = str_extract(as.character(death_calendar_quarter), "Q[1-4]")
+  )
+
+highest_quarters <- quarter_counts |>
+  group_by(year) |>
+  slice_max(n, n = 1, with_ties = FALSE) |>
+  ungroup() |>
+  mutate(
+    label = paste0(year, " - ", quarter, " - ", n)
+  )
+
+ggplot(quarter_counts, aes(x = death_calendar_quarter, y = n, group = 1)) +
+  geom_line(color = "#2F65A7", linewidth = 1) +
+  geom_point(color = "#2F65A7", size = 2) +
+  geom_text(
+    data = highest_quarters,
+    aes(label = label),
+    vjust = -0.8,
+    color = "black",
+    size = 3.5
+  ) +
+  labs(
+    title = "Deaths among children aged 0-14 by calendar quarter",
+    x = "Calendar quarter",
+    y = "Number of deaths"
+  ) +
+  theme_minimal() +
+  theme(
+    axis.text.x = element_text(angle = 45, hjust = 1)
+  )
+
+```
+
+Circumstances of death by age group
+```{r}
+df_0_14 |>
+  mutate(
+    CIRCOBITO = if_else(is.na(CIRCOBITO) | str_squish(CIRCOBITO) == "", "Missing", as.character(CIRCOBITO))
+  ) |>
+  count(age_group, CIRCOBITO) |>
+  ggplot(aes(x = age_group, y = n, fill = CIRCOBITO)) +
+  geom_col(position = "fill") +
+  scale_y_continuous(labels = percent) +
+  labs(
+    title = "Circumstances of death by age group",
+    x = "Age group",
+    y = "Percent within age group",
+    fill = "Circumstance"
+  ) +
+  theme_minimal()
+
+```
+
+----------
+MAPS
+--------
+
+1. Define years and file paths
+```{r}
+years_to_map <- c(2014, 2017, 2021, 2024)
+
+population_data <- "/Users/abiramisomasundaram/Desktop/Brazil pesticides/Data/Dados Version 2/Dados/resultados/base_consolidada_sp_2014_2024.parquet"
+
+sp_shapefile_path <- "/Users/abiramisomasundaram/Desktop/Brazil pesticides/Workspace/SHAPEFILES FOR MAPS-SAO PAULO BRAZIL/SP_Municipios_2025_with 6 digit/SP_Municipios_2025/SP_Municipios_2025.shp"
+
+# Death data columns
+date_col <- "DTOBITO"
+age_col <- "IDADEanos"
+death_muni_col <- "CODMUNRES"
+
+# Population parquet columns
+
+pop_muni_col <- "cod_ibge"     
+pop_year_col <- "ano"         
+pop_value_col <- "pop_0_14" 
+
+# Shapefile columns
+shape_muni_col <- "COD_6"      
+shape_name_col <- "NM_MUN"  
+
+# Helper function 
+
+make_code6 <- function(x) {
+  x <- as.character(x)
+  x <- str_squish(x)
+  x <- str_replace_all(x, "\\.0$", "")
+  x <- str_replace_all(x, "[^0-9]", "")
+  x <- if_else(x == "", NA_character_, x)
+  
+  case_when(
+    is.na(x) ~ NA_character_,
+    nchar(x) >= 7 ~ str_sub(x, 1, 6),
+    nchar(x) == 6 ~ x,
+    TRUE ~ str_pad(x, width = 6, side = "left", pad = "0")
+  )
+}
+
+```
+
+
+# 1. Prepare deaths dataset
+
+```{r}
+df_analysis <- df |>
+  mutate(
+    death_date = ymd(.data[[date_col]]),
+    death_year = year(death_date),
+    age_years = parse_number(as.character(.data[[age_col]])),
+    code_muni_6 = make_code6(.data[[death_muni_col]])
+  )
+
+
+# Keep only deaths aged 0-14 in selected years 
+
+deaths_0_14 <- df_analysis |>
+  filter(
+    !is.na(age_years),
+    age_years >= 0,
+    age_years <= 14,
+    death_year %in% years_to_map,
+    !is.na(code_muni_6)
+  )
+
+
+# Count deaths by municipality and year 
+
+deaths_0_14_muni_year <- deaths_0_14 |>
+  count(
+    code_muni_6,
+    year = death_year,
+    name = "deaths_0_14"
+  )
+
+```
+
+3.Prepare death counts for ages 0–14
+
+```{r}
+deaths_0_14_muni_year <- df_analysis |>
+  filter(
+    !is.na(age_years),
+    age_years >= 0,
+    age_years <= 14,
+    death_year %in% years_to_map
+  ) |>
+  mutate(
+    code_muni_6 = make_code6(CODMUNRES)
+  ) |>
+  filter(!is.na(code_muni_6)) |>
+  count(
+    code_muni_6,
+    year = death_year,
+    name = "deaths_0_14"
+  )
+
+
+```
+
+
+# 2. Read population denominator parquet
+```{r}
+pop_raw <- read_parquet("/Users/abiramisomasundaram/Desktop/Brazil pesticides/Data/Dados Version 2/Dados/resultados/base_consolidada_sp_2014_2024.parquet")
+
+# Check available columns
+names(pop_raw)
+
+# Clean population data -----------------------------------
+
+pop_0_14_clean <- pop_raw |>
+  transmute(
+    code_muni_6 = make_code6(.data[[pop_muni_col]]),
+    year = as.integer(.data[[pop_year_col]]),
+    pop_0_14 = as.numeric(.data[[pop_value_col]])
+  ) |>
+  filter(
+    year %in% years_to_map,
+    !is.na(code_muni_6),
+    !is.na(pop_0_14),
+    pop_0_14 > 0
+  )
+
+# Optional check
+pop_0_14_clean |>
+  count(year)
+
+pop_0_14_clean |>
+  arrange(year, code_muni_6) |>
+  print(n = 20)
+
+
+```
+
+# 3. Calculate mortality rate per 100,000 children aged 0-14
+
+```{r}
+
+rate_0_14_muni_year <- pop_0_14_clean |>
+  left_join(
+    deaths_0_14_muni_year,
+    by = c("code_muni_6", "year")
+  ) |>
+  mutate(
+    deaths_0_14 = replace_na(deaths_0_14, 0),
+    mortality_rate_100k = 100000 * deaths_0_14 / pop_0_14
+  )
+
+
+# Check highest rates
+rate_0_14_muni_year |>
+  arrange(year, desc(mortality_rate_100k)) |>
+  select(
+    code_muni_6,
+    year,
+    deaths_0_14,
+    pop_0_14,
+    mortality_rate_100k
+  ) |>
+  mutate(
+    mortality_rate_100k = round(mortality_rate_100k, 2)
+  ) |>
+  print(n = 50)
+
+```
+
+
+# 4. Read São Paulo municipality shapefile
+
+```{r}
+sp_muni_sf <- st_read("/Users/abiramisomasundaram/Desktop/Brazil pesticides/Workspace/SHAPEFILES FOR MAPS-SAO PAULO BRAZIL/SP_Municipios_2025_with 6 digit/SP_Municipios_2025/SP_Municipios_2025.shp", quiet = FALSE)
+
+# Check shapefile columns
+names(sp_muni_sf)
+
+
+# Clean shapefile ------------------------------------------
+# The shapefile must contain municipality polygons.
+# If it is only the outline of São Paulo state, it cannot show municipality-level rates.
+
+sp_muni_sf_clean <- sp_muni_sf |>
+  mutate(
+    code_muni_6 = make_code6(.data[[shape_muni_col]])
+  ) |>
+  filter(!is.na(code_muni_6)) |>
+  st_make_valid()
+
+
+# Optional: create municipality name column if available ----
+
+if (shape_name_col %in% names(sp_muni_sf_clean)) {
+  sp_muni_sf_clean <- sp_muni_sf_clean |>
+    mutate(municipality_name = as.character(.data[[shape_name_col]]))
+} else {
+  sp_muni_sf_clean <- sp_muni_sf_clean |>
+    mutate(municipality_name = code_muni_6)
+}
+
+# Check duplicate municipality codes in shapefile
+sp_muni_sf_clean |>
+  st_drop_geometry() |>
+  count(code_muni_6) |>
+  filter(n > 1)
 
 
 
+
+
+```
+# 5. Join rates to shapefile
+
+```{r}
+# Create one map row per municipality per selected year
+
+sp_muni_year_sf <- sp_muni_sf_clean[
+  rep(seq_len(nrow(sp_muni_sf_clean)), each = length(years_to_map)),
+]
+
+sp_muni_year_sf$year <- rep(
+  years_to_map,
+  times = nrow(sp_muni_sf_clean)
+)
+
+
+# Join mortality rates
+
+map_rate_0_14 <- sp_muni_year_sf |>
+  left_join(
+    rate_0_14_muni_year,
+    by = c("code_muni_6", "year")
+  )
+
+
+# For municipalities with population data but zero deaths, deaths should be zero.
+# For municipalities with missing population data, rate remains NA.
+
+map_rate_0_14 <- map_rate_0_14 |>
+  mutate(
+    deaths_0_14 = if_else(
+      !is.na(pop_0_14) & is.na(deaths_0_14),
+      0,
+      deaths_0_14
+    ),
+    mortality_rate_100k = if_else(
+      !is.na(pop_0_14) & is.na(mortality_rate_100k),
+      0,
+      mortality_rate_100k
+    )
+  )
+
+
+# Join check
+map_rate_0_14 |>
+  st_drop_geometry() |>
+  summarise(
+    municipalities_years = n(),
+    missing_population_rows = sum(is.na(pop_0_14)),
+    missing_rate_rows = sum(is.na(mortality_rate_100k))
+  )
+
+```
+
+# 6. Main rate map: continuous color scale
+
+```{r}
+
+# Project to SIRGAS 2000 / UTM zone 23S
+target_crs <- 31983
+
+map_rate_0_14_proj <- map_rate_0_14 |>
+  st_transform(target_crs)
+
+
+# Create São Paulo state boundary for each year
+state_outline_year_proj <- map_rate_0_14_proj |>
+  group_by(year) |>
+  summarise(
+    geometry = st_union(geometry),
+    .groups = "drop"
+  ) |>
+  st_as_sf()
+
+
+# Municipality with highest mortality rate in each year
+highest_mortality_labels_proj <- map_rate_0_14_proj |>
+  filter(!is.na(mortality_rate_100k)) |>
+  group_by(year) |>
+  slice_max(
+    order_by = mortality_rate_100k,
+    n = 1,
+    with_ties = FALSE
+  ) |>
+  ungroup() |>
+  mutate(
+    label = paste0(
+      municipality_name,
+      "\n",
+      round(mortality_rate_100k, 1),
+      " per 100k"
+    )
+  )
+#Convert those selected municipalities to label points
+highest_mortality_points_proj <- highest_mortality_labels_proj
+
+st_geometry(highest_mortality_points_proj) <- st_point_on_surface(
+  st_geometry(highest_mortality_labels_proj)
+)
+
+
+#plot
+ggplot() +
+  # Municipality polygons with dark grey boundaries
+  geom_sf(
+    data = map_rate_0_14_proj,
+    aes(fill = mortality_rate_100k),
+    color = "grey35",
+    linewidth = 0.05
+  ) +
+  
+  # São Paulo state boundary in black
+  geom_sf(
+    data = state_outline_year_proj,
+    fill = NA,
+    color = "black",
+    linewidth = 0.3
+  ) +
+  
+  # Labels for municipality with highest mortality rate each year
+  geom_sf_label(
+  data = highest_mortality_points_proj,
+  aes(label = label),
+  fill = "white",
+  color = "black",
+  size = 3,
+  label.size = 0.25,
+  alpha = 0.9,
+  nudge_x = 60000,   # move label 60 km to the right/east
+  nudge_y = 0,
+  hjust = 0
+)+
+  
+  facet_wrap(~ year) +
+  scale_fill_gradientn(
+    colors = c(
+      "white",
+      "#FFFFB2",
+      "#FECC5C",
+      "#FD8D3C",
+      "#F03B20",
+      "#BD0026",
+      "#800026"
+    ),
+    na.value = "grey90",
+    labels = label_number(accuracy = 0.1)
+  ) +
+  labs(
+    title = "Mortality rate among children aged 0-14 by municipality of residence",
+    subtitle = "São Paulo, selected years; label shows municipality with highest rate each year",
+    fill = "Deaths per\n100,000 children\naged 0-14",
+    caption = "Rate = deaths among ages 0-14 / population aged 0-14 × 100,000"
+  ) +
+  theme_void() +
+  theme(
+    strip.text = element_text(face = "bold", size = 12),
+    plot.title = element_text(face = "bold"),
+    legend.position = "right"
+  )
+
+```
+
+#Missing ness plot :
+
+```{r}
+# Missingness for all variables in df
+missing_results_all_vars <- missing_table(df, names(df))
+
+# Keep only variables with missingness
+missing_plot_all_vars <- missing_results_all_vars |>
+  filter(missing_n > 0) |>
+  mutate(
+    variable = fct_reorder(variable, missing_percent)
+  )
+
+# Plot
+ggplot(missing_plot_all_vars, aes(x = variable, y = missing_percent)) +
+  geom_col(fill = "#2F65A7") +
+  geom_text(
+    aes(label = paste0(missing_percent, "%")),
+    hjust = -0.1,
+    size = 3.5
+  ) +
+  coord_flip() +
+  scale_y_continuous(
+    labels = label_percent(scale = 1),
+    limits = c(0, max(missing_plot_all_vars$missing_percent) * 1.15)
+  ) +
+  labs(
+    title = "Missingness in the SIM Dataset",
+    subtitle = "Only variables with at least one missing value are shown",
+    x = NULL,
+    y = "Missing percentage"
+  ) +
+  theme_minimal()
+
+
+```
