@@ -1,0 +1,107 @@
+---
+title: "sisagua_2014_2024"
+output: html_document
+date: "2026-07-13"
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+##### Packages
+
+```{r}
+library(readr)
+library(arrow)
+library(readxl)
+library(dplyr)
+library(ggplot2)
+library(tidyr)
+library(purrr)
+library(DataExplorer)
+library(knitr)
+library(kableExtra)
+```
+
+##### Dataset
+
+```{r}
+
+sisagua <- read_parquet("~/GitHub/intox_agro/resultados/SISAGUA/sisagua_sp_2014_2024.parquet")
+```
+
+# Exceeding Permitted Values
+
+## Create Variable
+
+```{r}
+sisagua <- sisagua %>%
+  mutate(
+    above_vmp = if_else(
+      is.na(RESULTADO_NUM) | is.na(VMP),
+      NA_integer_,
+      if_else(RESULTADO_NUM > VMP, 1L, 0)))
+
+```
+
+### Plot Missing
+
+```{r}
+plot_missing(
+  sisagua[, c(
+    "RESULTADO_NUM",
+    "VMP",
+    "above_vmp")])
+
+sisagua %>%
+  group_by(NU_ANO) %>%
+  summarise(
+    pct_missing_RESULTADO_NUM =
+      mean(is.na(RESULTADO_NUM)) * 100,
+    pct_missing_VMP =
+      mean(is.na(VMP)) * 100)
+```
+
+### Table
+
+```{r}
+#table
+above_vmp_summary <- sisagua %>%
+  group_by(NU_ANO) %>%
+  summarise(
+    n_municipalities = sum(!is.na(above_vmp)),
+    n_above_vmp = sum(above_vmp, na.rm = TRUE),
+    pct_above_vmp = 100 * mean(above_vmp, na.rm = TRUE),
+    .groups = "drop"
+  )
+
+above_vmp_summary
+
+#plot
+ggplot(above_vmp_summary,
+       aes(x = NU_ANO, y = pct_above_vmp)) +
+  geom_line(linewidth = 1.2) +
+  geom_point(size = 3) +
+  scale_x_continuous(breaks = sort(unique(above_vmp_summary$NU_ANO))) +
+  scale_y_continuous(
+    limits = c(0, 5),
+    breaks = seq(0, 5, by = 1)
+  ) +
+  labs(
+    title = "Percentage of Municipalities with Samples Above the Permitted Level by Year",
+    x = "Year",
+    y = "Municipalities Above VMP (%)"
+  ) +
+  theme_minimal()
+```
+
+### Save dataset
+
+```{r}
+for (yr in 2014:2024) {
+  sisagua %>%
+    filter(NU_ANO == yr) %>%
+    write_csv(paste0("sisagua_", yr, ".csv"))
+}
+
+```

@@ -131,7 +131,7 @@ consolidada <- consolidada %>%
   group_by(ano) %>%
   mutate(
     sisagua_pct_deteccao_quartile =
-      ntile(desc(sisagua_pct_deteccao), 4)
+      ntile(sisagua_pct_deteccao, 4)
   ) %>%
   ungroup()
 ```
@@ -263,7 +263,7 @@ consolidada <- consolidada %>%
   group_by(ano) %>%
   mutate(
     sisagua_n_pesticidas_detect_quartile =
-      ntile(desc(sisagua_n_pesticidas_detect), 4)
+      ntile(sisagua_n_pesticidas_detect, 4)
   ) %>%
   ungroup()
 ```
@@ -392,7 +392,7 @@ consolidada <- consolidada %>%
 group_by(ano) %>%
   mutate(
     pam_area_colhida_ha_quartile =
-      ntile(desc(pam_area_colhida_ha), 4)
+      ntile(pam_area_colhida_ha, 4)
   ) %>%
   ungroup()
 ```
@@ -524,7 +524,7 @@ consolidada <- consolidada %>%
   group_by(ano) %>%
   mutate(
     pam_valor_prod_mil_reais_quartile =
-      ntile(desc(pam_valor_prod_mil_reais), 4)
+      ntile(pam_valor_prod_mil_reais, 4)
   ) %>%
   ungroup()
 ```

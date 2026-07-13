@@ -668,6 +668,11 @@ library(kableExtra)</code></pre>
 ##  9 351512             NA
 ## 10 351580             NA
 ## # ℹ 63 more rows</code></pre>
+<pre class="r"><code>race |&gt;   
+  filter(is.na(pct_parda)) |&gt;   
+  select(cod_ibge, pct_parda)</code></pre>
+<pre><code>## # A tibble: 0 × 2
+## # ℹ 2 variables: cod_ibge &lt;chr&gt;, pct_parda &lt;dbl&gt;</code></pre>
 <p>Indígena: missing for 73 municipalities</p>
 <p>Amarela: missing for 2 municipalities</p>
 <p>Preta: no missing</p>
@@ -741,6 +746,7 @@ race_quartiles &lt;- race %&gt;%
     Other_Q    = ntile(pct_other, 4),
     Parda_Q    = ntile(pct_parda, 4))
 
+#save
 write.csv(race_quartiles, &quot;race_quartiles.csv&quot;, row.names = FALSE)</code></pre>
 <pre class="r"><code>race_vars &lt;- c(&quot;pct_branca&quot;, &quot;pct_parda&quot;, &quot;pct_other&quot;)
 
@@ -1107,9 +1113,22 @@ ggplot(quartile_summary,
 </div>
 <div id="raw-distribution---sp-state" class="section level2">
 <h2>Raw Distribution - SP State</h2>
-</div>
-<div id="section" class="section level2">
-<h2></h2>
+<pre class="r"><code>sum(race$pct_branca)</code></pre>
+<pre><code>## [1] 38536.4</code></pre>
+<pre class="r"><code>38536.4/645</code></pre>
+<pre><code>## [1] 59.74636</code></pre>
+<pre class="r"><code>sum(race$pct_parda)</code></pre>
+<pre><code>## [1] 21698.32</code></pre>
+<pre class="r"><code>21698.32/645</code></pre>
+<pre><code>## [1] 33.64081</code></pre>
+<pre class="r"><code>sum(race$pct_other, na.rm = TRUE)</code></pre>
+<pre><code>## [1] 3824.66</code></pre>
+<pre class="r"><code>3824.66/645</code></pre>
+<pre><code>## [1] 5.929705</code></pre>
+<p>59.75% Branca</p>
+<p>33.64% Parda</p>
+<p>5.93% Other</p>
+<p>0.68% Missing</p>
 </div>
 
 

@@ -62,7 +62,8 @@ poisoning <- consolidada |>
          sim_n_obitos_0_14,
          taxa_hosp_0_14_100k,
          taxa_notif_0_14_100k,
-         taxa_obitos_sim_0_14_100k)
+         taxa_obitos_sim_0_14_100k,
+         sih_n_obitos_hosp_0_14)
 ```
 
 # Hospitalization per 100K
@@ -160,6 +161,70 @@ ggplot(poisoning_summary,
   theme_minimal()
 ```
 
+## Ribbon Plot
+
+```{r}
+
+summary_quartile <- poisoning %>%
+  group_by(ano, taxa_hosp_0_14_100k_quartile) %>%
+  summarise(
+    min = min(taxa_hosp_0_14_100k, na.rm = TRUE),
+    median = median(taxa_hosp_0_14_100k, na.rm = TRUE),
+    max = max(taxa_hosp_0_14_100k, na.rm = TRUE),
+    .groups = "drop"
+  )
+
+ggplot(summary_quartile,
+       aes(x = ano,
+           y = median,
+           color = factor(taxa_hosp_0_14_100k_quartile),
+           group = taxa_hosp_0_14_100k_quartile)) +
+  geom_linerange(aes(ymin = min, ymax = max), alpha = 0.5) +
+  geom_line(linewidth = 1) +
+  geom_point(size = 2) +
+  scale_x_continuous(breaks = unique(summary_quartile$ano)) +
+  labs(
+    x = "Year",
+    y = "Value",
+    color = "Quartile"
+  ) +
+  theme_minimal()
+
+ggplot(poisoning,
+       aes(x = factor(ano),
+           y = taxa_hosp_0_14_100k,
+           fill = factor(taxa_hosp_0_14_100k_quartile))) +
+  geom_boxplot(position = position_dodge(width = 0.8)) +
+  labs(
+    x = "Year",
+    y = "Value",
+    fill = "Quartile"
+  ) +
+  theme_minimal()
+```
+
+## Extreme Values
+
+```{r}
+range(poisoning$taxa_hosp_0_14_100k, na.rm = TRUE)
+
+consolidada %>%
+  filter(taxa_hosp_0_14_100k > 100) %>%
+  arrange(desc(taxa_hosp_0_14_100k)) %>%
+  select(cod_ibge, ano, taxa_hosp_0_14_100k)
+
+
+#table
+poisoning %>%
+  group_by(cod_ibge) %>%
+  summarise(
+    n_years_over_100 = sum(taxa_hosp_0_14_100k > 100, na.rm = TRUE),
+    .groups = "drop"
+  ) %>%
+  filter(n_years_over_100 > 0) %>%
+  arrange(desc(n_years_over_100))
+```
+
 ## Normality
 
 ```{r}
@@ -177,7 +242,7 @@ ggplot(poisoning, aes(x = taxa_hosp_0_14_100k)) +
 poisoning <- poisoning %>%
   mutate(
     sih_cfr = if_else(sih_n_hosp_0_14 > 0,
-                      (sih_n_obitos_hosp / sih_n_hosp_0_14) * 100,
+                      (sih_n_obitos_hosp_0_14 / sih_n_hosp_0_14) * 100,
                       NA_real_))
 ```
 
@@ -234,7 +299,7 @@ fatality_summary <- poisoning %>%
   select(ano, Quartile, n, Median, Range)
 
 
-poisoning_summary
+fatality_summary
 
 #kable
 fatality_summary %>%
@@ -279,6 +344,11 @@ ggplot(poisoning, aes(x = sih_cfr)) +
 #### Save dataset for mapping
 
 ```{r}
-write.csv(poisoning, "poisoning.csv", row.names = FALSE)
+
+for (yr in 2014:2024) {
+  poisoning %>%
+    filter(ano == yr) %>%
+    write_csv(paste0("poisoning_", yr, ".csv"))
+}
 
 ```
