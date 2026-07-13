@@ -59,6 +59,7 @@ library(sf)
 library(geobr)
 library(knitr)
 library(viridis)
+library(arrow)
 ```
 
 
@@ -201,7 +202,6 @@ kable(
 
 
 # 5. Frequency table by year and child age group
-
 
 ```{r age-group-year-frequency}
 age_group_year_summary <- pop_child %>%
@@ -365,7 +365,7 @@ child_percent_year_agegroup <- pop_child %>%
     child_percent = child_population / total_population * 100
   )
 
-ggplot(
+child_percent_over_time_plot <- ggplot(
   child_percent_year_agegroup,
   aes(x = ano, y = child_percent, color = age_group, group = age_group)
 ) +
@@ -380,22 +380,509 @@ ggplot(
     color = "Age group"
   ) +
   theme_minimal(base_size = 13)
+
+child_percent_over_time_plot
+
+ggsave(
+  filename = "/Users/abiramisomasundaram/Desktop/Brazil pesticides/Workspace/Plots/Population/child_population_percentage_over_time.jpeg",
+  plot = child_percent_over_time_plot,
+  width = 9,
+  height = 5,
+  dpi = 300
+)
 ```
 
-# Plot -2 : Population pyramid, ages 0-14, by year
+
+Map- Quartiles of child population percentage, ages 0-14
+
+```{r}
+sp_muni <- st_read(
+  "/Users/abiramisomasundaram/Desktop/Brazil pesticides/Workspace/SHAPEFILES FOR MAPS-SAO PAULO BRAZIL/SP_Municipios_2025_with 6 digit/SP_Municipios_2025/SP_Municipios_2025.shp"
+) %>%
+  clean_names() %>%
+  mutate(
+    shapefile_code = as.character(cod_6),
+    cod_ibge = str_pad(shapefile_code, width = 6, side = "left", pad = "0")
+  )
+
+names(sp_muni)
+
+glimpse(sp_muni)
+
+
+```
+
+```{r}
+# Select years to map
+map_years <- c(2014, 2024)
+
+# Total population by municipality and year
+total_pop_muni_year_014 <- pop %>%
+  group_by(cod_ibge, ano) %>%
+  summarise(
+    total_population = sum(populacao, na.rm = TRUE),
+    .groups = "drop"
+  )
+
+# Child population age 0-14 by municipality and year
+child_pop_014_muni_year <- pop_child %>%
+  group_by(cod_ibge, ano) %>%
+  summarise(
+    child_population_0_14 = sum(populacao, na.rm = TRUE),
+    .groups = "drop"
+  ) %>%
+  left_join(
+    total_pop_muni_year_014,
+    by = c("cod_ibge", "ano")
+  ) %>%
+  mutate(
+    child_percent_0_14 = child_population_0_14 / total_population * 100
+  )
+
+# Calculate quartiles within each year
+child_percent_014_quartiles <- child_pop_014_muni_year %>%
+  filter(ano %in% map_years) %>%
+  group_by(ano) %>%
+  mutate(
+    child_percent_014_quartile = ntile(child_percent_0_14, 4)
+  ) %>%
+  ungroup() %>%
+  mutate(
+    child_percent_014_quartile = factor(
+      child_percent_014_quartile,
+      levels = 1:4,
+      labels = c("Q1 lowest", "Q2", "Q3", "Q4 highest")
+    ),
+    ano = factor(ano, levels = map_years)
+  )
+
+# Duplicate shapefile for the two years
+sp_muni_years <- bind_rows(
+  lapply(
+    map_years,
+    function(y) {
+      sp_muni %>%
+        mutate(
+          ano = factor(y, levels = map_years)
+        )
+    }
+  )
+)
+
+# Join quartile data to municipality geometry
+quartile_map_014_sf <- sp_muni_years %>%
+  left_join(
+    child_percent_014_quartiles,
+    by = c("cod_ibge", "ano")
+  )
+
+# Make the map
+quartile_map_014_plot <- ggplot(quartile_map_014_sf) +
+  geom_sf(
+    aes(fill = child_percent_014_quartile),
+    color = "white",
+    linewidth = 0.1
+  ) +
+  facet_wrap(~ ano, ncol = 2) +
+  scale_fill_manual(
+    values = c(
+      "Q1 lowest" = "#ffffcc",
+      "Q2" = "#fd8d3c",
+      "Q3" = "#f03b20",
+      "Q4 highest" = "#bd0026"
+    ),
+    na.value = "grey85",
+    drop = FALSE
+  ) +
+  labs(
+    title = "Quartiles of child population percentage, ages 0-14",
+    subtitle = "São Paulo municipalities, 2014 and 2024",
+    fill = "Child population\npercentage quartile",
+    caption = "Quartiles calculated within each year using municipality-level percentage aged 0-14."
+  ) +
+  theme_minimal(base_size = 13) +
+  theme(
+    axis.text = element_blank(),
+    axis.title = element_blank(),
+    panel.grid = element_blank(),
+    strip.text = element_text(face = "bold", size = 13),
+    legend.position = "right",
+    plot.title = element_text(face = "bold")
+  )
+
+quartile_map_014_plot
+
+ggsave(
+  filename = "/Users/abiramisomasundaram/Desktop/Brazil pesticides/Workspace/Plots/Population/quartile_map_child_population_0_14_2014_2024.jpeg",
+  plot = quartile_map_014_plot,
+  width = 12,
+  height = 6,
+  dpi = 300
+)
+
+```
+
+
+
+------------------------------------
+Visualisations and Maps for Sex
+------------------------------------
+#Create sex-cleaned population object
+
+```{r}
+sex_values_check <- pop %>%
+  count(sexo, sort = TRUE)
+
+kable(
+  sex_values_check,
+  caption = "Original values of sex variable"
+)
+
+# Create standardized sex labels
+pop_sex <- pop %>%
+  mutate(
+    sexo_lower = str_to_lower(str_trim(sexo)),
+    sex_label = case_when(
+      sexo_lower %in% c("f", "female", "feminino", "mulher", "2") |
+        str_detect(sexo_lower, "fem") ~ "Female",
+      
+      sexo_lower %in% c("m", "male", "masculino", "homem", "1") |
+        str_detect(sexo_lower, "masc") ~ "Male",
+      
+      TRUE ~ "Other/Unknown"
+    ),
+    sex_label = factor(
+      sex_label,
+      levels = c("Female", "Male", "Other/Unknown")
+    )
+  )
+
+pop_child_sex <- pop_sex %>%
+  filter(idade >= 0, idade <= 14)
+
+pop_sex %>%
+  count(sex_label, sort = TRUE) %>%
+  kable(caption = "Standardized sex categories")
+
+
+
+```
+
+# Child population pyramid, ages 0–14, by sex
+
+```{r}
+map_years <- c(2014, 2024)
+
+child_pyramid_percent_data <- pop_child_sex %>%
+  filter(
+    ano %in% map_years,
+    sex_label %in% c("Female", "Male")
+  ) %>%
+  group_by(ano, idade, sex_label) %>%
+  summarise(
+    population = sum(populacao, na.rm = TRUE),
+    .groups = "drop"
+  ) %>%
+  group_by(ano) %>%
+  mutate(
+    total_child_population_year = sum(population, na.rm = TRUE),
+    percent_child_population = population / total_child_population_year * 100
+  ) %>%
+  ungroup() %>%
+  mutate(
+    plot_percent = if_else(
+      sex_label == "Male",
+      -percent_child_population,
+      percent_child_population
+    ),
+    ano = factor(ano, levels = map_years)
+  )
+
+child_pyramid_percent_plot <- ggplot(
+  child_pyramid_percent_data,
+  aes(
+    x = factor(idade),
+    y = plot_percent,
+    fill = sex_label
+  )
+) +
+  geom_col(width = 0.85) +
+  coord_flip() +
+  facet_wrap(~ ano, ncol = 2) +
+  scale_y_continuous(
+    labels = function(x) paste0(abs(x), "%")
+  ) +
+  scale_fill_manual(
+    values = c(
+      "Female" = "#E34A6F",
+      "Male" = "#2C7FB8"
+    )
+  ) +
+  labs(
+    title = "Child population pyramid by sex, ages 0-14",
+    subtitle = "Percentage of total child population within each year, São Paulo municipalities, 2014 and 2024",
+    x = "Age",
+    y = "Percent of child population aged 0-14",
+    fill = "Sex",
+    caption = "Male percentages are shown on the left; female percentages are shown on the right."
+  ) +
+  theme_minimal(base_size = 13) +
+  theme(
+    plot.title = element_text(face = "bold"),
+    strip.text = element_text(face = "bold", size = 13),
+    legend.position = "bottom"
+  )
+
+child_pyramid_percent_plot
+
+#save jpeg
+ggsave(
+  filename = "/Users/abiramisomasundaram/Desktop/Brazil pesticides/Workspace/Plots/Population/child_population_pyramid_percent_sex_2014_2024.jpeg",
+  plot = child_pyramid_percent_plot,
+  width = 11,
+  height = 6,
+  dpi = 300
+)
+```
+
+
+```{r}
+# Create municipality name if possible
+name_candidates <- c(
+  "nome_mun",
+  "nm_mun",
+  "nm_municip",
+  "nm_municipio",
+  "municipio",
+  "name_muni",
+  "nome"
+)
+
+muni_name_col <- intersect(name_candidates, names(sp_muni))[1]
+
+sp_muni_named <- sp_muni %>%
+  mutate(
+    municipality_name = if (!is.na(muni_name_col)) {
+      as.character(.data[[muni_name_col]])
+    } else {
+      cod_ibge
+    }
+  )
+
+# Total municipal population by year
+total_pop_muni_year_sexmap <- pop %>%
+  group_by(cod_ibge, ano) %>%
+  summarise(
+    total_population = sum(populacao, na.rm = TRUE),
+    .groups = "drop"
+  )
+
+# Child population age 0-14 by municipality, year, and sex
+sex_child_muni_year <- pop_child_sex %>%
+  filter(sex_label %in% c("Female", "Male")) %>%
+  group_by(cod_ibge, ano, sex_label) %>%
+  summarise(
+    sex_child_population_0_14 = sum(populacao, na.rm = TRUE),
+    .groups = "drop"
+  ) %>%
+  left_join(
+    total_pop_muni_year_sexmap,
+    by = c("cod_ibge", "ano")
+  ) %>%
+  mutate(
+    sex_child_percent_total = sex_child_population_0_14 / total_population * 100
+  )
+
+# Quartiles within each year and sex
+sex_child_quartiles <- sex_child_muni_year %>%
+  filter(ano %in% map_years) %>%
+  group_by(ano, sex_label) %>%
+  mutate(
+    sex_child_percent_quartile = ntile(sex_child_percent_total, 4)
+  ) %>%
+  ungroup() %>%
+  mutate(
+    sex_child_percent_quartile = factor(
+      sex_child_percent_quartile,
+      levels = 1:4,
+      labels = c("Q1 lowest", "Q2", "Q3", "Q4 highest")
+    )
+  )
+
+# Duplicate shapefile by year and sex
+sp_muni_years_sex <- bind_rows(
+  lapply(
+    map_years,
+    function(y) {
+      bind_rows(
+        lapply(
+          c("Female", "Male"),
+          function(s) {
+            sp_muni_named %>%
+              mutate(
+                ano = y,
+                sex_label = s
+              )
+          }
+        )
+      )
+    }
+  )
+)
+
+# Join quartile data to geometry
+sex_child_quartile_map_sf <- sp_muni_years_sex %>%
+  left_join(
+    sex_child_quartiles,
+    by = c("cod_ibge", "ano", "sex_label")
+  ) %>%
+  mutate(
+    ano = factor(ano, levels = map_years),
+    sex_label = factor(sex_label, levels = c("Female", "Male"))
+  )
+
+# Map
+sex_child_quartile_map_plot <- ggplot(sex_child_quartile_map_sf) +
+  geom_sf(
+    aes(fill = sex_child_percent_quartile),
+    color = "white",
+    linewidth = 0.1
+  ) +
+  facet_grid(sex_label ~ ano) +
+  scale_fill_manual(
+    values = c(
+      "Q1 lowest" = "#ffffcc",
+      "Q2" = "#fd8d3c",
+      "Q3" = "#f03b20",
+      "Q4 highest" = "#bd0026"
+    ),
+    na.value = "grey85",
+    drop = FALSE
+  ) +
+  labs(
+    title = "Quartiles of sex-specific child population percentage, ages 0-14",
+    subtitle = "Percentage of total municipal population represented by female or male children, São Paulo, 2014 and 2024",
+    fill = "Quartile",
+    caption = "Quartiles calculated within each year and sex."
+  ) +
+  theme_minimal(base_size = 13) +
+  theme(
+    axis.text = element_blank(),
+    axis.title = element_blank(),
+    panel.grid = element_blank(),
+    strip.text = element_text(face = "bold", size = 13),
+    legend.position = "right",
+    plot.title = element_text(face = "bold")
+  )
+
+sex_child_quartile_map_plot
+
+
+``` 
 
 
 
 
 
+```{r}
+child_sex_ratio_muni_year <- sex_child_muni_year %>%
+  filter(ano %in% map_years) %>%
+  select(cod_ibge, ano, sex_label, sex_child_population_0_14) %>%
+  pivot_wider(
+    names_from = sex_label,
+    values_from = sex_child_population_0_14,
+    values_fill = 0
+  ) %>%
+  mutate(
+    child_sex_ratio = if_else(
+      Female > 0,
+      Male / Female * 100,
+      NA_real_
+    )
+  ) %>%
+  group_by(ano) %>%
+  mutate(
+    child_sex_ratio_quartile = ntile(child_sex_ratio, 4)
+  ) %>%
+  ungroup() %>%
+  mutate(
+    child_sex_ratio_quartile = factor(
+      child_sex_ratio_quartile,
+      levels = 1:4,
+      labels = c("Q1 lowest", "Q2", "Q3", "Q4 highest")
+    )
+  )
+
+# Duplicate shapefile by year
+sp_muni_years_ratio <- bind_rows(
+  lapply(
+    map_years,
+    function(y) {
+      sp_muni_named %>%
+        mutate(
+          ano = y
+        )
+    }
+  )
+)
+
+# Join sex-ratio data to geometry
+child_sex_ratio_map_sf <- sp_muni_years_ratio %>%
+  left_join(
+    child_sex_ratio_muni_year,
+    by = c("cod_ibge", "ano")
+  ) %>%
+  mutate(
+    ano = factor(ano, levels = map_years)
+  )
+
+# Map
+child_sex_ratio_map_plot <- ggplot(child_sex_ratio_map_sf) +
+  geom_sf(
+    aes(fill = child_sex_ratio_quartile),
+    color = "white",
+    linewidth = 0.1
+  ) +
+  facet_wrap(~ ano, ncol = 2) +
+  scale_fill_manual(
+    values = c(
+   "Q1 lowest" = "#EFF3FF",
+    "Q2" = "#BDD7E7",
+    "Q3" = "#6BAED6",
+    "Q4 highest" = "#2171B5"
+    ),
+    na.value = "grey85",
+    drop = FALSE
+  ) +
+  labs(
+    title = "Quartiles of child sex ratio, ages 0-14",
+    subtitle = "Boys per 100 girls by municipality, São Paulo, 2014 and 2024",
+    fill = "Sex-ratio quartile",
+    caption = "Quartiles calculated within each year. Sex ratio = male children / female children × 100."
+  ) +
+  theme_minimal(base_size = 13) +
+  theme(
+    axis.text = element_blank(),
+    axis.title = element_blank(),
+    panel.grid = element_blank(),
+    strip.text = element_text(face = "bold", size = 13),
+    legend.position = "right",
+    plot.title = element_text(face = "bold")
+  )
+
+child_sex_ratio_map_plot
+
+#save jpeg
+ggsave(
+  filename = "/Users/abiramisomasundaram/Desktop/Brazil pesticides/Workspace/Plots/Population/child_sex_ratio_quartile_map_2014_2024.jpeg",
+  plot = child_sex_ratio_map_plot,
+  width = 12,
+  height = 6,
+  dpi = 300
+)
 
 
-
-
-
-
-
-
+```
 
 
 

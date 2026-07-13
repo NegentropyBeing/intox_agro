@@ -222,7 +222,8 @@ missing_summary %>%
 5. Visualisation: missingness
 
 ```{r missingness-plot, fig.width=9, fig.height=6}
-missing_summary %>%
+missingness_plot <- missing_summary %>%
+  filter(missing_pct > 0) %>%
   mutate(variable = fct_reorder(variable, missing_pct)) %>%
   ggplot(aes(x = variable, y = missing_pct)) +
   geom_col(fill = "#2C7FB8") +
@@ -230,9 +231,20 @@ missing_summary %>%
   scale_y_continuous(labels = percent_format(scale = 1)) +
   labs(
     title = "Missingness by variable",
+    subtitle = "Only variables with missingness are shown",
     x = "Variable",
     y = "Missing values (%)"
   )
+
+missingness_plot
+
+ggsave(
+  filename = "/Users/abiramisomasundaram/Desktop/Brazil pesticides/Workspace/Plots/SINAN/missingness_by_variable.jpeg",
+  plot = missingness_plot,
+  width = 9,
+  height = 6,
+  dpi = 300
+)
 ```
 
 
@@ -279,7 +291,7 @@ categorical_summary %>%
 7. . Visualisation: notifications over time
 
 ```{r notifications-over-time, fig.width=9, fig.height=5}
-df %>%
+pesticide_notifications_plot <- df %>%
   filter(!is.na(nu_ano_num)) %>%
   count(nu_ano_num, name = "n") %>%
   ggplot(aes(x = nu_ano_num, y = n)) +
@@ -291,11 +303,19 @@ df %>%
     x = "Year of notification",
     y = "Number of notifications"
   )
+
+ggsave(
+  filename = "/Users/abiramisomasundaram/Desktop/Brazil pesticides/Workspace/Plots/SINAN/pesticide_notifications_over_time.jpeg",
+  plot = pesticide_notifications_plot,
+  width = 9,
+  height = 6,
+  dpi = 300
+)
 ```
 8. Visualisation: outcome by occupational accident status
 
-```{r outcome-by-occupational-status-heatmap, fig.width=9, fig.height=6}
-df %>%
+```{r outcome-by-occupational-status-heatmap, fig.width=9, fig.height=5}
+outcome_occupational_heatmap <- df %>%
   count(occupational_accident, outcome_label, name = "n") %>%
   group_by(occupational_accident) %>%
   mutate(percent = 100 * n / sum(n)) %>%
@@ -310,9 +330,16 @@ df %>%
     aes(label = paste0(round(percent, 1), "%\n", "n=", n)),
     size = 3
   ) +
-  scale_fill_gradient(
-    low = "#F7FBFF",
-    high = "#08519C",
+  scale_fill_gradientn(
+    colors = c(
+      "white",
+      "#FFFFB2",
+      "#FECC5C",
+      "#FD8D3C",
+      "#F03B20",
+      "#BD0026",
+      "#800026"
+    ),
     labels = percent_format(scale = 1)
   ) +
   labs(
@@ -325,6 +352,16 @@ df %>%
   theme(
     axis.text.x = element_text(angle = 30, hjust = 1)
   )
+
+outcome_occupational_heatmap
+
+ggsave(
+  filename = "//Users/abiramisomasundaram/Desktop/Brazil pesticides/Workspace/Plots/SINAN/outcome_distribution_by_occupational_accident.jpeg",
+  plot = outcome_occupational_heatmap,
+  width = 10,
+  height = 7,
+  dpi = 300
+)
 ```
 
 
@@ -591,4 +628,13 @@ rate_map_selected_blue <- ggplot(sp_map_selected_proj) +
   )
 
 rate_map_selected_blue
+ggsave(
+  filename = "//Users/abiramisomasundaram/Desktop/Brazil pesticides/Workspace/Plots/SINAN/Pesticide_notification_rate_map.jpeg",
+  plot = rate_map_selected_blue,
+  width = 10,
+  height = 7,
+  dpi = 300
+)
+
+
 ```
