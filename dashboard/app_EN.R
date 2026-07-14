@@ -1,13 +1,15 @@
 # ==========================================================================
 # Pesticides & Health — São Paulo 2014–2024
-# Interactive exploratory dashboard (local Shiny prototype)
+# Interactive exploratory dashboard (local Shiny prototype) — ENGLISH version
 #
 # Run:  install once ->  install.packages(c("shiny","bslib","plotly",
 #                          "leaflet","reactable","sf","arrow","dplyr",
 #                          "tidyr","scales","geobr"))
 #       cache geometry ->  Rscript dashboard/setup_geo.R   (one-time)
-#       launch        ->  shiny::runApp("dashboard")   (or "Run App" in RStudio)
+#       launch (RStudio) ->  open this file and click "Run App"
+#       launch (console) ->  shiny::runApp(shiny::shinyAppFile("dashboard/app_EN.R"))
 #
+# This is the English twin of app.R — identical logic and data, translated UI.
 # Reads only versioned outputs in resultados/ — no raw microdata, no network.
 # Working directory is assumed to be the repo root (Agrotoxicos.Rproj).
 # ==========================================================================
@@ -25,10 +27,10 @@ library(sf)
 
 # --------------------------------------------------------------------------
 # PROJECT ROOT
-# shiny::runApp("dashboard") sets the working directory to dashboard/, so
-# relative paths to resultados/ break. Walk up from the current wd until we
-# find the consolidated base — works whether launched from the repo root,
-# via runApp(), or via RStudio "Run App".
+# shiny::runApp() sets the working directory to dashboard/, so relative paths
+# to resultados/ break. Walk up from the current wd until we find the
+# consolidated base — works whether launched from the repo root, via runApp(),
+# or via RStudio "Run App".
 # --------------------------------------------------------------------------
 
 find_root <- function() {
@@ -40,7 +42,7 @@ find_root <- function() {
     d <- parent
   }
   stop("Could not locate the repo root (resultados/base_consolidada_sp_2014_2024.parquet). ",
-       "Open Agrotoxicos.Rproj and run shiny::runApp(\"dashboard\").")
+       "Open Agrotoxicos.Rproj and run shiny::runApp(shiny::shinyAppFile(\"dashboard/app_EN.R\")).")
 }
 ROOT <- find_root()
 rp <- function(...) file.path(ROOT, ...)   # path relative to repo root
@@ -68,23 +70,23 @@ sp_munis <- if (file.exists(geo_path)) readRDS(geo_path) else NULL
 #   fmt = value formatter
 # --------------------------------------------------------------------------
 
-fmt_num <- function(x) format(round(x), big.mark = ".", decimal.mark = ",")
-fmt_dec <- function(x) format(round(x, 1), big.mark = ".", decimal.mark = ",", nsmall = 1)
+fmt_num <- function(x) format(round(x), big.mark = ",", decimal.mark = ".")
+fmt_dec <- function(x) format(round(x, 1), big.mark = ",", decimal.mark = ".", nsmall = 1)
 
 indicators <- tibble::tribble(
-  ~id,                          ~label,                                                  ~agg,  ~fmt,
-  "taxa_hosp_100k",             "Internações /100 mil (todas as idades)",                "med", "dec",
-  "taxa_hosp_0_14_100k",        "Internações /100 mil (0–14 anos)",                      "med", "dec",
-  "taxa_notif_100k",            "Notificações SINAN /100 mil",                           "med", "dec",
-  "taxa_obitos_sim_100k",       "Óbitos /100 mil",                                       "med", "dec",
-  "sih_n_hosp",                 "Internações (contagem)",                                "sum", "num",
-  "sinan_n_notif",              "Notificações SINAN (contagem)",                         "sum", "num",
-  "sim_n_obitos",               "Óbitos (contagem)",                                     "sum", "num",
-  "censo_pct_uso_agrotox",      "% estabelec. que usaram agrotóxico (Censo Agro 2017)",  "med", "dec",
-  "sisagua_pct_deteccao",       "% amostras de água com detecção (SISAGUA)",             "med", "dec",
-  "pam_area_colhida_ha",        "Área colhida (ha, PAM)",                                "sum", "num",
-  "ivs",                        "Índice de Vulnerabilidade Social (IVS)",                "med", "dec",
-  "pct_rural_2022",             "% população rural (Censo 2022)",                        "med", "dec"
+  ~id,                          ~label,                                              ~agg,  ~fmt,
+  "taxa_hosp_100k",             "Hospitalizations /100k (all ages)",                 "med", "dec",
+  "taxa_hosp_0_14_100k",        "Hospitalizations /100k (ages 0–14)",                "med", "dec",
+  "taxa_notif_100k",            "SINAN notifications /100k",                         "med", "dec",
+  "taxa_obitos_sim_100k",       "Deaths /100k",                                      "med", "dec",
+  "sih_n_hosp",                 "Hospitalizations (count)",                          "sum", "num",
+  "sinan_n_notif",              "SINAN notifications (count)",                       "sum", "num",
+  "sim_n_obitos",               "Deaths (count)",                                    "sum", "num",
+  "censo_pct_uso_agrotox",      "% establishments using pesticides (Ag Census 2017)","med", "dec",
+  "sisagua_pct_deteccao",       "% water samples with detection (SISAGUA)",          "med", "dec",
+  "pam_area_colhida_ha",        "Harvested area (ha, PAM)",                          "sum", "num",
+  "ivs",                        "Social Vulnerability Index (IVS)",                  "med", "dec",
+  "pct_rural_2022",             "% rural population (2022 Census)",                  "med", "dec"
 )
 
 ind_choices <- setNames(indicators$id, indicators$label)
@@ -99,25 +101,25 @@ ind_fmt  <- function(id, x) if (ind_meta(id)$fmt == "num") fmt_num(x) else fmt_d
 
 sys_cfg <- list(
   SIH = list(
-    label = "SIH — Internações", path = "resultados/SIH/sih_iexo_sp_2014_2024.parquet",
+    label = "SIH — Hospitalizations", path = "resultados/SIH/sih_iexo_sp_2014_2024.parquet",
     year_col = "ANO_CMPT", cod_col = "MUNIC_RES", lazy = TRUE,
     dims = c("SEXO", "RACA_COR", "MORTE"),
     show = c("N_AIH", "ANO_CMPT", "MUNIC_RES", "DIAG_PRINC", "SEXO", "IDADE", "COD_IDADE", "MORTE", "DIAS_PERM")
   ),
   SINAN = list(
-    label = "SINAN — Notificações", path = "resultados/SINAN/sinan_iexo_sp_2014_2024.parquet",
+    label = "SINAN — Notifications", path = "resultados/SINAN/sinan_iexo_sp_2014_2024.parquet",
     year_col = "ano_origem", cod_col = "ID_MN_RESI", lazy = TRUE,
     dims = c("CS_SEXO", "CS_RACA", "EVOLUCAO", "AGENTE_TOX"),
     show = c("NU_ANO", "ID_MN_RESI", "NU_IDADE_N", "CS_SEXO", "AGENTE_TOX", "LAVOURA", "EVOLUCAO")
   ),
   SIM = list(
-    label = "SIM — Óbitos", path = "resultados/SIM/sim_iexo_sp_2014_2024.parquet",
+    label = "SIM — Deaths", path = "resultados/SIM/sim_iexo_sp_2014_2024.parquet",
     year_col = NULL, cod_col = "CODMUNRES", lazy = FALSE,   # tiny; derive year from DTOBITO
     dims = c("SEXO", "RACACOR", "CIRCOBITO"),
     show = c("DTOBITO", "CODMUNRES", "CAUSABAS", "SEXO", "IDADEanos", "RACACOR", "CIRCOBITO")
   ),
   SISAGUA = list(
-    label = "SISAGUA — Água", path = "resultados/SISAGUA/sisagua_sp_2014_2024.parquet",
+    label = "SISAGUA — Water", path = "resultados/SISAGUA/sisagua_sp_2014_2024.parquet",
     year_col = "NU_ANO", cod_col = "cod_ibge", lazy = TRUE,
     dims = c("TIPO_RESULTADO", "PARAMETRO_FINAL"),
     show = c("cod_ibge", "NU_ANO", "PARAMETRO_FINAL", "TIPO_RESULTADO", "RESULTADO_NUM", "VMP", "UNIDADE")
@@ -154,32 +156,32 @@ read_sys <- function(key, yr_range, cods = NULL) {
 theme <- bs_theme(version = 5, primary = "#1b7837")
 
 ui <- page_navbar(
-  title = "Agrotóxicos & Saúde — SP 2014–2024",
+  title = "Pesticides & Health — SP 2014–2024",
   theme = theme,
   fillable = TRUE,
 
   # ---- Tab 1: Overview (aggregated municipal base) ----
   nav_panel(
-    "Visão geral",
+    "Overview",
     layout_sidebar(
       sidebar = sidebar(
         width = 300,
-        selectInput("ind", "Indicador", choices = ind_choices),
-        sliderInput("ano", "Ano (mapa / ranking / cartões)",
+        selectInput("ind", "Indicator", choices = ind_choices),
+        sliderInput("ano", "Year (map / ranking / cards)",
                     min = min(anos), max = max(anos), value = max(anos),
                     step = 1, sep = "", animate = TRUE),
-        selectizeInput("muni", "Municípios (filtra a página)", multiple = TRUE,
+        selectizeInput("muni", "Municipalities (filters the page)", multiple = TRUE,
                        choices = sort(unique(base$nome_municipio)),
-                       options = list(placeholder = "todos")),
-        helpText("Base município × ano (7.095 linhas, 73 variáveis). Coberturas fixas",
-                 "(Censo Agro 2017, IVS 2010, urbano/rural 2022) repetem por ano.")
+                       options = list(placeholder = "all")),
+        helpText("Municipality × year base (7,095 rows, 73 variables). Fixed covariates",
+                 "(Ag Census 2017, IVS 2010, urban/rural 2022) repeat across years.")
       ),
       layout_columns(
         fill = FALSE,
-        value_box("Internações no ano", textOutput("kpi_hosp"), theme = "primary"),
-        value_box("Notificações SINAN", textOutput("kpi_notif"), theme = "secondary"),
-        value_box("Óbitos", textOutput("kpi_obitos"), theme = "danger"),
-        value_box("Municípios c/ detecção na água", textOutput("kpi_agua"), theme = "info")
+        value_box("Hospitalizations in year", textOutput("kpi_hosp"), theme = "primary"),
+        value_box("SINAN notifications", textOutput("kpi_notif"), theme = "secondary"),
+        value_box("Deaths", textOutput("kpi_obitos"), theme = "danger"),
+        value_box("Municipalities w/ water detection", textOutput("kpi_agua"), theme = "info")
       ),
       layout_columns(
         col_widths = c(6, 6),
@@ -189,45 +191,45 @@ ui <- page_navbar(
       layout_columns(
         col_widths = c(5, 7),
         card(card_header(textOutput("rank_title")), plotlyOutput("rank", height = 380)),
-        card(card_header("Tabela — município × ano"), reactableOutput("tbl"))
+        card(card_header("Table — municipality × year"), reactableOutput("tbl"))
       )
     )
   ),
 
   # ---- Tab 2: Microdata drill ----
   nav_panel(
-    "Microdados",
+    "Microdata",
     layout_sidebar(
       sidebar = sidebar(
         width = 300,
-        selectInput("sys", "Sistema", choices = setNames(names(sys_cfg), sapply(sys_cfg, `[[`, "label"))),
-        sliderInput("m_anos", "Anos", min = min(anos), max = max(anos),
+        selectInput("sys", "System", choices = setNames(names(sys_cfg), sapply(sys_cfg, `[[`, "label"))),
+        sliderInput("m_anos", "Years", min = min(anos), max = max(anos),
                     value = c(min(anos), max(anos)), step = 1, sep = ""),
-        selectizeInput("m_muni", "Municípios", multiple = TRUE,
+        selectizeInput("m_muni", "Municipalities", multiple = TRUE,
                        choices = sort(unique(base$nome_municipio)),
-                       options = list(placeholder = "todos")),
+                       options = list(placeholder = "all")),
         uiOutput("dim_ui"),
-        helpText("Filtragem lazy via arrow — o SISAGUA (3,3 M linhas) é",
-                 "agregado no disco; a tabela mostra uma amostra de 500 linhas.")
+        helpText("Lazy filtering via arrow — SISAGUA (3.3M rows) is aggregated",
+                 "on disk; the table shows a 500-row sample.")
       ),
       layout_columns(
         fill = FALSE,
-        value_box("Registros no filtro", textOutput("m_n"), theme = "primary"),
-        value_box("Municípios", textOutput("m_munis"), theme = "secondary"),
-        value_box("Período", textOutput("m_periodo"), theme = "info")
+        value_box("Records in filter", textOutput("m_n"), theme = "primary"),
+        value_box("Municipalities", textOutput("m_munis"), theme = "secondary"),
+        value_box("Period", textOutput("m_periodo"), theme = "info")
       ),
       layout_columns(
         col_widths = c(6, 6),
-        card(card_header("Registros por ano"), plotlyOutput("m_byyear", height = 320)),
+        card(card_header("Records per year"), plotlyOutput("m_byyear", height = 320)),
         card(card_header(textOutput("m_dim_title")), plotlyOutput("m_bydim", height = 320))
       ),
-      card(card_header("Amostra de registros (500)"), reactableOutput("m_tbl"))
+      card(card_header("Record sample (500)"), reactableOutput("m_tbl"))
     )
   ),
 
   nav_spacer(),
   nav_item(tags$span(style = "color:#888;font-size:.85em;",
-                     "Protótipo local · FSP-USP × University of Michigan"))
+                     "Local prototype · FSP-USP × University of Michigan"))
 )
 
 # --------------------------------------------------------------------------
@@ -249,8 +251,8 @@ server <- function(input, output, session) {
 
   output$trend_title <- renderText({
     n <- length(input$muni)
-    if (n == 0) "Série temporal — estado"
-    else sprintf("Série temporal — %d município(s) selecionado(s)", n)
+    if (n == 0) "Time series — state"
+    else sprintf("Time series — %d municipality(ies) selected", n)
   })
 
   output$kpi_hosp   <- renderText(fmt_num(sum(year_slice()$sih_n_hosp, na.rm = TRUE)))
@@ -262,7 +264,7 @@ server <- function(input, output, session) {
 
   output$map <- renderLeaflet({
     validate(need(!is.null(sp_munis),
-                  "Geometria não encontrada. Rode uma vez: Rscript dashboard/setup_geo.R"))
+                  "Geometry not found. Run once: Rscript dashboard/setup_geo.R"))
     id <- input$ind
     dat <- sp_munis |>
       left_join(year_slice() |> transmute(cod_ibge, val = .data[[id]]),
@@ -273,7 +275,7 @@ server <- function(input, output, session) {
       addPolygons(
         fillColor = ~pal(val), fillOpacity = 0.8, color = "white", weight = 0.4,
         label = ~lapply(sprintf("<b>%s</b><br>%s: %s", name_muni,
-                                ind_meta(id)$label, ifelse(is.na(val), "sem dado", ind_fmt(id, val))),
+                                ind_meta(id)$label, ifelse(is.na(val), "no data", ind_fmt(id, val))),
                         htmltools::HTML),
         highlightOptions = highlightOptions(weight = 2, color = "#333", bringToFront = TRUE)
       ) |>
@@ -286,7 +288,7 @@ server <- function(input, output, session) {
       group_by(ano) |>
       summarise(v = if (agg == "sum") sum(.data[[id]], na.rm = TRUE)
                      else median(.data[[id]], na.rm = TRUE), .groups = "drop")
-    ylab <- if (agg == "sum") "Total" else "Mediana municipal"
+    ylab <- if (agg == "sum") "Total" else "Municipal median"
     plot_ly(tr, x = ~ano, y = ~v, type = "scatter", mode = "lines+markers",
             line = list(color = "#1b7837", width = 3), marker = list(color = "#1b7837"),
             hovertemplate = paste0("%{x}: %{y:.1f}<extra></extra>")) |>
@@ -294,7 +296,7 @@ server <- function(input, output, session) {
              yaxis = list(title = ylab), margin = list(t = 10))
   })
 
-  output$rank_title <- renderText(paste0("Top 15 municípios — ", input$ano))
+  output$rank_title <- renderText(paste0("Top 15 municipalities — ", input$ano))
 
   output$rank <- renderPlotly({
     id <- input$ind
@@ -319,15 +321,15 @@ server <- function(input, output, session) {
     reactable(d, searchable = TRUE, striped = TRUE, compact = TRUE,
               defaultPageSize = 10, defaultSorted = list(ano = "desc"),
               columns = list(
-                nome_municipio = colDef(name = "Município", minWidth = 140),
-                ano = colDef(name = "Ano", maxWidth = 70),
-                sih_n_hosp = colDef(name = "Intern."),
-                taxa_hosp_100k = colDef(name = "Tx int./100k", format = colFormat(digits = 1)),
-                taxa_hosp_0_14_100k = colDef(name = "Tx 0–14/100k", format = colFormat(digits = 1)),
+                nome_municipio = colDef(name = "Municipality", minWidth = 140),
+                ano = colDef(name = "Year", maxWidth = 70),
+                sih_n_hosp = colDef(name = "Hosp."),
+                taxa_hosp_100k = colDef(name = "Hosp. rate/100k", format = colFormat(digits = 1)),
+                taxa_hosp_0_14_100k = colDef(name = "0–14 rate/100k", format = colFormat(digits = 1)),
                 sinan_n_notif = colDef(name = "Notif."),
-                sim_n_obitos = colDef(name = "Óbitos"),
-                censo_pct_uso_agrotox = colDef(name = "% uso agrotóx.", format = colFormat(digits = 1)),
-                sisagua_pct_deteccao = colDef(name = "% detec. água", format = colFormat(digits = 1))
+                sim_n_obitos = colDef(name = "Deaths"),
+                censo_pct_uso_agrotox = colDef(name = "% pesticide use", format = colFormat(digits = 1)),
+                sisagua_pct_deteccao = colDef(name = "% water detect.", format = colFormat(digits = 1))
               ))
   })
 
@@ -340,7 +342,7 @@ server <- function(input, output, session) {
 
   # dynamic breakdown-dimension selector, per system
   output$dim_ui <- renderUI({
-    selectInput("m_dim", "Quebrar por", choices = sys_cfg[[input$sys]]$dims)
+    selectInput("m_dim", "Break down by", choices = sys_cfg[[input$sys]]$dims)
   })
 
   # filtered data (collected once per change); big systems aggregated lazily
@@ -365,10 +367,10 @@ server <- function(input, output, session) {
     d <- m_data() |> count(.year) |> collect() |> arrange(.year)
     plot_ly(d, x = ~.year, y = ~n, type = "bar", marker = list(color = "#1b7837"),
             hovertemplate = "%{x}: %{y}<extra></extra>") |>
-      layout(xaxis = list(title = "", dtick = 1), yaxis = list(title = "registros"))
+      layout(xaxis = list(title = "", dtick = 1), yaxis = list(title = "records"))
   })
 
-  output$m_dim_title <- renderText(paste("Registros por", input$m_dim %||% ""))
+  output$m_dim_title <- renderText(paste("Records by", input$m_dim %||% ""))
 
   output$m_bydim <- renderPlotly({
     req(input$m_dim)
