@@ -60,6 +60,15 @@ sisagua %>%
       mean(is.na(RESULTADO_NUM)) * 100,
     pct_missing_VMP =
       mean(is.na(VMP)) * 100)
+
+sisagua %>%
+  filter(is.na(RESULTADO_NUM)) %>%
+  summarise(n_municipalities = n_distinct(cod_ibge))
+
+sisagua %>%
+  filter(is.na(VMP)) %>%
+  summarise(n_municipalities = n_distinct(cod_ibge))
+
 ```
 
 ### Table

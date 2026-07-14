@@ -58,6 +58,10 @@ consolidada %>%
   filter(is.na(sisagua_pct_deteccao)) %>%
   distinct(cod_ibge)
 
+consolidada %>%
+  filter(is.na(pam_area_colhida_ha)) %>%
+  summarise(n_municipalities = n_distinct(cod_ibge))
+
 #trends in missingness
 consolidada %>%
   group_by(is.na(sisagua_pct_deteccao)) %>%
