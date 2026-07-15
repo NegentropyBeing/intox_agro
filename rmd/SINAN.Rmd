@@ -312,6 +312,7 @@ ggsave(
   dpi = 300
 )
 ```
+
 8. Visualisation: outcome by occupational accident status
 
 ```{r outcome-by-occupational-status-heatmap, fig.width=9, fig.height=5}
@@ -629,7 +630,7 @@ rate_map_selected_blue <- ggplot(sp_map_selected_proj) +
 
 rate_map_selected_blue
 ggsave(
-  filename = "//Users/abiramisomasundaram/Desktop/Brazil pesticides/Workspace/Plots/SINAN/Pesticide_notification_rate_map.jpeg",
+  filename = "/Users/abiramisomasundaram/Desktop/Brazil pesticides/Workspace/Plots/SINAN/Pesticide_notification_rate_map.jpeg",
   plot = rate_map_selected_blue,
   width = 10,
   height = 7,
@@ -638,3 +639,119 @@ ggsave(
 
 
 ```
+
+----------------------------------------
+SISAUGA DATA 
+--------------------------------
+
+
+```{r}
+ #File paths
+parquet_path <- "/Users/abiramisomasundaram/Desktop/Brazil pesticides/Data/Dados Version 2/Dados/resultados/base_consolidada_sp_2014_2024.parquet"
+shapefile_path <- "/Users/abiramisomasundaram/Desktop/Brazil pesticides/Workspace/SHAPEFILES FOR MAPS-SAO PAULO BRAZIL/SP_Municipios_2025_with 6 digit/SP_Municipios_2025/SP_Municipios_2025.shp"
+
+# Read Parquet file
+sisagua <- read_parquet(parquet_path)
+
+# Read São Paulo municipality shapefile
+sp_mun <- st_read(shapefile_path, quiet = TRUE)
+
+# Check column names if needed
+names(sisagua)
+names(sp_mun)
+```
+
+
+# Prepare Sisauga Data 
+
+```{r}
+years_keep <- c(2014, 2017, 2021, 2024)
+
+sisagua_map <- sisagua %>%
+  mutate(
+    cod_ibge = as.character(cod_ibge),
+    ano = as.integer(ano),
+    sisagua_pct_deteccao = as.numeric(sisagua_pct_deteccao)
+  ) %>%
+  filter(ano %in% years_keep) %>%
+  group_by(cod_ibge, nome_municipio, ano) %>%
+  summarise(
+    sisagua_pct_deteccao = mean(sisagua_pct_deteccao, na.rm = TRUE),
+    .groups = "drop"
+  ) %>%
+  mutate(
+    sisagua_pct_deteccao = ifelse(
+      is.nan(sisagua_pct_deteccao),
+      NA,
+      sisagua_pct_deteccao
+    )
+  )
+```
+
+
+```{r}
+
+sp_mun_clean <- sp_mun %>%
+  st_make_valid() %>%
+  mutate(
+    cod_ibge = as.character(COD_6)
+  )
+
+```
+
+
+## Join data to shapefile
+
+```{r}
+sp_map <- sp_mun_clean %>%
+  left_join(sisagua_map, by = "cod_ibge")
+```
+
+## Create choropleth map
+
+```{r fig.width=12, fig.height=9}
+p_map <- ggplot(sp_map) +
+  geom_sf(
+    aes(fill = sisagua_pct_deteccao),
+    color = "white",
+    linewidth = 0.1
+  ) +
+  facet_wrap(~ ano, ncol = 2) +
+  scale_fill_gradientn(
+    colors = c("#ffffb2", "#fecc5c", "#fd8d3c", "#f03b20", "#bd0026"),
+    limits = c(0, 100),
+    breaks = c(0, 25, 50, 75, 100),
+    labels = c("0%", "25%", "50%", "75%", "100%"),
+    na.value = "grey85",
+    name = "Samples with\nquantifiable\ndetection"
+  ) +
+  labs(
+    title = "Percentage of Samples with Quantifiable Detection",
+    subtitle = "Municipalities of São Paulo, Brazil, 2014, 2017, 2021, and 2024",
+    caption = "Grey areas indicate missing data"
+  ) +
+  theme_minimal() +
+  theme(
+    axis.text = element_blank(),
+    axis.title = element_blank(),
+    panel.grid = element_blank(),
+    strip.text = element_text(face = "bold", size = 12),
+    plot.title = element_text(face = "bold", size = 16),
+    legend.position = "right"
+  )
+
+p_map
+
+ggsave(
+  filename = "/Users/abiramisomasundaram/Desktop/Brazil pesticides/Workspace/Plots/sisagua_detection_sao_paulo_map.jpeg",
+  plot = p_map,
+  width = 12,
+  height = 9,
+  units = "in",
+  dpi = 300
+)
+
+
+```
+
+
