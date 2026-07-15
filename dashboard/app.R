@@ -22,6 +22,8 @@ library(plotly)
 library(leaflet)
 library(reactable)
 library(sf)
+library(ggplot2)
+library(patchwork)
 
 # --------------------------------------------------------------------------
 # PROJECT ROOT
@@ -73,23 +75,84 @@ fmt_dec <- function(x) format(round(x, 1), big.mark = ".", decimal.mark = ",", n
 
 indicators <- tibble::tribble(
   ~id,                          ~label,                                                  ~agg,  ~fmt,
+  # --- Desfechos (taxas) ---
   "taxa_hosp_100k",             "Internações /100 mil (todas as idades)",                "med", "dec",
   "taxa_hosp_0_14_100k",        "Internações /100 mil (0–14 anos)",                      "med", "dec",
   "taxa_notif_100k",            "Notificações SINAN /100 mil",                           "med", "dec",
+  "taxa_notif_0_14_100k",       "Notificações SINAN /100 mil (0–14 anos)",               "med", "dec",
   "taxa_obitos_sim_100k",       "Óbitos /100 mil",                                       "med", "dec",
+  "taxa_obitos_sim_0_14_100k",  "Óbitos /100 mil (0–14 anos)",                           "med", "dec",
+  "taxa_letalidade_hosp",       "Letalidade hospitalar (%)",                             "med", "dec",
+  "taxa_letalidade_hosp_0_14",  "Letalidade hospitalar 0–14 (%)",                        "med", "dec",
+  # --- Desfechos (contagens) ---
   "sih_n_hosp",                 "Internações (contagem)",                                "sum", "num",
   "sinan_n_notif",              "Notificações SINAN (contagem)",                         "sum", "num",
   "sim_n_obitos",               "Óbitos (contagem)",                                     "sum", "num",
+  # --- Exposição ---
   "censo_pct_uso_agrotox",      "% estabelec. que usaram agrotóxico (Censo Agro 2017)",  "med", "dec",
-  "sisagua_pct_deteccao",       "% amostras de água com detecção (SISAGUA)",             "med", "dec",
   "pam_area_colhida_ha",        "Área colhida (ha, PAM)",                                "sum", "num",
+  "sisagua_pct_deteccao",       "% amostras de água com detecção (SISAGUA)",             "med", "dec",
+  "caged_saldo_liquido_agro",   "Saldo líquido de emprego agrícola (CAGED)",             "sum", "num",
+  # --- Contexto / vulnerabilidade / "quem" ---
   "ivs",                        "Índice de Vulnerabilidade Social (IVS)",                "med", "dec",
-  "pct_rural_2022",             "% população rural (Censo 2022)",                        "med", "dec"
+  "ibp_deprivation_median",     "Índice de Privação (IBP, mediana)",                     "med", "dec",
+  "ipvs_pct_grupo6",            "% no grupo de vulnerab. mais alta (IPVS G6)",           "med", "dec",
+  "pct_rural_2022",             "% população rural (Censo 2022)",                        "med", "dec",
+  "pct_parda",                  "% população parda (Censo 2022)",                        "med", "dec",
+  "pct_preta",                  "% população preta (Censo 2022)",                        "med", "dec",
+  "pct_branca",                 "% população branca (Censo 2022)",                       "med", "dec",
+  "pct_amarela",                "% população amarela (Censo 2022)",                      "med", "dec",
+  "pct_indigena",               "% população indígena (Censo 2022)",                     "med", "dec"
 )
 
 ind_choices <- setNames(indicators$id, indicators$label)
 ind_meta <- function(id) indicators[match(id, indicators$id), ]
 ind_fmt  <- function(id, x) if (ind_meta(id)$fmt == "num") fmt_num(x) else fmt_dec(x)
+
+# --------------------------------------------------------------------------
+# BIVARIATE MAP — 3x3 tercile choropleth for the "Relações" tab.
+# Rendered as a static ggplot/sf so it exports cleanly into the report.
+# Palette: blue (Y) × pink (X) → purple, bilinear with perceptually distinct
+# hues so the 9 classes stay legible (keyed "<x>-<y>", 1..3).
+# --------------------------------------------------------------------------
+
+biv_pal <- c(
+  "1-1" = "#e8e8e8", "2-1" = "#d79797", "3-1" = "#c64646",
+  "1-2" = "#97a1d8", "2-2" = "#8e6c95", "3-2" = "#863752",
+  "1-3" = "#465ac8", "2-3" = "#464194", "3-3" = "#46285f"
+)
+
+# terciles, NA-safe (NA input -> NA group, never a numeric bin)
+safe_ntile <- function(v, n = 3) {
+  out <- rep(NA_integer_, length(v)); ok <- !is.na(v)
+  out[ok] <- dplyr::ntile(v[ok], n); out
+}
+
+# df must carry cod_ibge, x, y. Returns a ggplot (map + 3x3 legend inset).
+bivariate_map <- function(df, xlab, ylab, year) {
+  d <- df |> mutate(xt = safe_ntile(x), yt = safe_ntile(y),
+                    cls = ifelse(is.na(xt) | is.na(yt), NA_character_, paste0(xt, "-", yt)))
+  mp <- sp_munis |> left_join(d, by = c("cod6" = "cod_ibge"))
+  main <- ggplot(mp) +
+    geom_sf(aes(fill = cls), color = "white", linewidth = 0.05) +
+    scale_fill_manual(values = biv_pal, na.value = "#e0e0e0", guide = "none") +
+    labs(title = sprintf("X: %s   |   Y: %s   (%s)", xlab, ylab, year),
+         caption = paste("Tercis por variável, dentro do ano. Cinza = sem dado.",
+                         "Co-distribuição municipal (ecológica) — descritiva, não causal.")) +
+    theme_void(base_size = 13) +
+    theme(plot.title = element_text(face = "bold", size = 12),
+          plot.caption = element_text(color = "#666", size = 8, hjust = 0))
+  leg_df <- expand.grid(x = 1:3, y = 1:3); leg_df$cls <- paste0(leg_df$x, "-", leg_df$y)
+  leg <- ggplot(leg_df, aes(x, y, fill = cls)) +
+    geom_tile(color = "white") +
+    scale_fill_manual(values = biv_pal, guide = "none") +
+    labs(x = "X →", y = "Y →") + coord_fixed() +
+    theme_minimal(base_size = 9) +
+    theme(axis.text = element_blank(), axis.ticks = element_blank(),
+          panel.grid = element_blank(),
+          axis.title.x = element_text(size = 8), axis.title.y = element_text(size = 8))
+  main + inset_element(leg, left = 0.0, bottom = 0.02, right = 0.26, top = 0.28, align_to = "full")
+}
 
 # --------------------------------------------------------------------------
 # MICRODATA CONFIG — one entry per source system for the "Microdata" tab.
@@ -194,7 +257,35 @@ ui <- page_navbar(
     )
   ),
 
-  # ---- Tab 2: Microdata drill ----
+  # ---- Tab 2: Relationships (bivariate) ----
+  nav_panel(
+    "Relações",
+    layout_sidebar(
+      sidebar = sidebar(
+        width = 300,
+        selectInput("relx", "Variável X", choices = ind_choices, selected = "censo_pct_uso_agrotox"),
+        selectInput("rely", "Variável Y", choices = ind_choices, selected = "taxa_hosp_100k"),
+        sliderInput("rel_ano", "Ano", min = min(anos), max = max(anos),
+                    value = max(anos), step = 1, sep = "", animate = TRUE),
+        downloadButton("dl_map", "Baixar mapa (PNG)", class = "btn-sm"),
+        helpText("Relação descritiva (ecológica) entre duas variáveis no grão município.",
+                 "Tercis por variável; correlação de Spearman como padrão.")
+      ),
+      layout_columns(
+        fill = FALSE,
+        value_box("Municípios no par", textOutput("rel_n"), theme = "primary"),
+        value_box("Correlação de Spearman", textOutput("rel_sp"), theme = "secondary"),
+        value_box("Correlação de Pearson", textOutput("rel_pe"), theme = "info")
+      ),
+      layout_columns(
+        col_widths = c(7, 5),
+        card(card_header("Mapa bivariado (3×3)"), plotOutput("biv_map", height = 460)),
+        card(card_header("Dispersão X × Y"), plotlyOutput("rel_scatter", height = 460))
+      )
+    )
+  ),
+
+  # ---- Tab 3: Microdata drill ----
   nav_panel(
     "Microdados",
     layout_sidebar(
@@ -330,6 +421,60 @@ server <- function(input, output, session) {
                 sisagua_pct_deteccao = colDef(name = "% detec. água", format = colFormat(digits = 1))
               ))
   })
+
+  # ---------- Relationships (bivariate) ----------
+
+  rel_data <- reactive({
+    base |>
+      filter(ano == input$rel_ano) |>
+      transmute(cod_ibge, nome_municipio,
+                x = .data[[input$relx]], y = .data[[input$rely]])
+  })
+
+  rel_stats <- reactive({
+    d <- rel_data() |> filter(!is.na(x), !is.na(y))
+    list(n = nrow(d),
+         sp = if (nrow(d) > 2) cor(d$x, d$y, method = "spearman") else NA_real_,
+         pe = if (nrow(d) > 2) cor(d$x, d$y, method = "pearson")  else NA_real_)
+  })
+
+  cor_fmt <- function(x) if (is.na(x)) "—" else formatC(x, format = "f", digits = 2)
+  output$rel_n  <- renderText(fmt_num(rel_stats()$n))
+  output$rel_sp <- renderText(cor_fmt(rel_stats()$sp))
+  output$rel_pe <- renderText(cor_fmt(rel_stats()$pe))
+
+  output$biv_map <- renderPlot({
+    validate(need(!is.null(sp_munis),
+                  "Geometria não encontrada. Rode uma vez: Rscript dashboard/setup_geo.R"))
+    bivariate_map(rel_data(), ind_meta(input$relx)$label, ind_meta(input$rely)$label, input$rel_ano)
+  }, res = 96)
+
+  output$rel_scatter <- renderPlotly({
+    d <- rel_data() |> filter(!is.na(x), !is.na(y))
+    xlab <- ind_meta(input$relx)$label; ylab <- ind_meta(input$rely)$label
+    p <- plot_ly(d, x = ~x, y = ~y, type = "scatter", mode = "markers",
+                 marker = list(color = "#5a9178", size = 6, opacity = 0.6),
+                 text = ~nome_municipio,
+                 hovertemplate = "%{text}<br>%{x}, %{y}<extra></extra>")
+    if (nrow(d) > 2) {
+      fit <- lm(y ~ x, data = d); xr <- range(d$x)
+      pr <- predict(fit, newdata = data.frame(x = xr))
+      p <- p |> add_trace(x = xr, y = pr, type = "scatter", mode = "lines",
+                          line = list(color = "#2a5a5b", width = 2),
+                          hoverinfo = "skip", showlegend = FALSE, inherit = FALSE)
+    }
+    p |> layout(xaxis = list(title = xlab), yaxis = list(title = ylab),
+                margin = list(t = 10), showlegend = FALSE)
+  })
+
+  output$dl_map <- downloadHandler(
+    filename = function() sprintf("bivariate_%s_%s_%s.png", input$relx, input$rely, input$rel_ano),
+    content = function(file) {
+      ggsave(file, plot = bivariate_map(rel_data(), ind_meta(input$relx)$label,
+                                        ind_meta(input$rely)$label, input$rel_ano),
+             width = 9, height = 7, dpi = 200, bg = "white")
+    }
+  )
 
   # ---------- Microdata ----------
 
