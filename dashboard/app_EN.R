@@ -90,6 +90,10 @@ indicators <- tibble::tribble(
   "sih_n_hosp",                 "Hospitalizations (count)",                          "sum", "num",
   "sinan_n_notif",              "SINAN notifications (count)",                       "sum", "num",
   "sim_n_obitos",               "Deaths (count)",                                    "sum", "num",
+  # --- Pesticide-specific outcomes (counts; issue #7) ---
+  "sih_n_hosp_pesticida",       "Pesticide hospitalizations (count)",                "sum", "num",
+  "sinan_n_notif_pesticida",    "Pesticide notifications (count)",                   "sum", "num",
+  "sim_n_obitos_pesticida",     "Pesticide deaths (count)",                          "sum", "num",
   # --- Exposure ---
   "censo_pct_uso_agrotox",      "% establishments using pesticides (Ag Census 2017)","med", "dec",
   "pam_area_colhida_ha",        "Harvested area (ha, PAM)",                          "sum", "num",

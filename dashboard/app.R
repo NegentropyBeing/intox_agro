@@ -88,6 +88,10 @@ indicators <- tibble::tribble(
   "sih_n_hosp",                 "Internações (contagem)",                                "sum", "num",
   "sinan_n_notif",              "Notificações SINAN (contagem)",                         "sum", "num",
   "sim_n_obitos",               "Óbitos (contagem)",                                     "sum", "num",
+  # --- Desfechos pesticida-específicos (contagens; issue #7) ---
+  "sih_n_hosp_pesticida",       "Internações por pesticida (contagem)",                  "sum", "num",
+  "sinan_n_notif_pesticida",    "Notificações por pesticida (contagem)",                 "sum", "num",
+  "sim_n_obitos_pesticida",     "Óbitos por pesticida (contagem)",                       "sum", "num",
   # --- Exposição ---
   "censo_pct_uso_agrotox",      "% estabelec. que usaram agrotóxico (Censo Agro 2017)",  "med", "dec",
   "pam_area_colhida_ha",        "Área colhida (ha, PAM)",                                "sum", "num",
