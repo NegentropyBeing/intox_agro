@@ -467,6 +467,31 @@ re-processing from raw DATASUS data.</li>
 altitude, area) were dropped as municipality-level geographic joins use
 <code>MUNIC_RES</code> directly.</li>
 </ul>
+</div>
+<div id="pesticide-specific-hospitalisations-issue-7" class="section level3">
+<h3>Pesticide-specific hospitalisations (issue #7)</h3>
+<p>Confirmed with the study advisor (2026-07-15). A hospitalisation is
+flagged pesticide-specific (<code>pesticida</code> in the individual
+file; aggregated as <code>sih_n_hosp_pesticida</code> in the base) when
+<strong>either</strong>:</p>
+<ul>
+<li>the principal diagnosis (<code>DIAG_PRINC</code>) is
+<strong>T60</strong> (any subtype), <strong>or</strong></li>
+<li>a pesticide external-cause code — <strong>X48</strong> (accidental),
+<strong>X68</strong> (intentional self-poisoning), <strong>X87</strong>
+(assault), <strong>Y18</strong> (undetermined intent) — appears in the
+principal (<code>DIAG_PRINC</code>), secondary
+(<code>DIAG_SECUN</code>), or associated (<code>CID_ASSO</code>)
+diagnosis field.</li>
+</ul>
+<p>No re-download was needed: because the original ICD filter keys on
+the principal diagnosis and poisoning admissions carry a T-code there,
+all such admissions were already captured; the external-cause codes live
+in the secondary/associated fields that were retained. T60 subtypes are
+aggregated separately in the base (<code>sih_n_hosp_t60_0</code> …
+<code>_t60_9</code>) so agents can be analysed individually. The broad
+<code>sih_n_hosp</code> (all exogenous intoxication) is kept unchanged
+alongside.</p>
 <hr />
 </div>
 </div>
@@ -512,6 +537,30 @@ temporal analysis.</li>
 <strong>residence</strong>, not of exposure. For occupational cases,
 <code>MUN_EMP</code> (employer’s municipality) may be more appropriate
 as the exposure geography.</p>
+</div>
+<div id="pesticide-specific-notifications-issue-7" class="section level3">
+<h3>Pesticide-specific notifications (issue #7)</h3>
+<p>Confirmed with the study advisor (2026-07-15). A notification is
+flagged pesticide-specific (<code>pesticida</code> in the individual
+file; aggregated as <code>sinan_n_notif_pesticida</code> in the base)
+when the <strong>primary toxic agent</strong> <code>AGENTE_TOX</code> is
+in the pesticide group: <strong>02</strong> (agricultural),
+<strong>03</strong> (domestic), <strong>04</strong> (public-health),
+<strong>05</strong> (rodenticide), <strong>06</strong> (veterinary).
+These five agent types are also aggregated separately in the base.</p>
+<p><strong>Strict primary-agent match.</strong> <code>AGENTE_TOX</code>
+is blank or <code>99</code> in ~6% of records (27,050 of 464,602). The
+advisor asked whether pesticide cases could be recovered from secondary
+agent fields when the primary is blank. On inspection this was
+<strong>not feasible as a clean coded match</strong>: the coded
+secondary field (<code>COAGTOXMA1/2/3</code>) is populated in only ~20
+of those blank rows and uses a different product-code scheme, while the
+usable secondary information (<code>AGENTE_1/2/3</code>,
+<code>P_ATIVO_*</code>) is <strong>free text</strong> (e.g. “CHUMBINHO”,
+“RATICIDA”, “HERBICIDA”). Free-text recovery would require a curated
+keyword dictionary with attendant false-positive/ negative risk, and was
+<strong>descoped</strong> for the current phase. The counts are
+therefore a conservative lower bound for blank-agent records.</p>
 <hr />
 </div>
 </div>
@@ -971,6 +1020,28 @@ retained where available:</p>
 </tr>
 </tbody>
 </table>
+</div>
+<div id="pesticide-specific-deaths-issue-7" class="section level3">
+<h3>Pesticide-specific deaths (issue #7)</h3>
+<p>Confirmed with the study advisor (2026-07-15). A death is flagged
+pesticide-specific (<code>sim_n_obitos_pesticida</code> in the base)
+when the underlying cause <code>CAUSABAS</code> is a pesticide
+external-cause code: <strong>X48</strong> (accidental),
+<strong>X68</strong> (intentional self-poisoning), <strong>X87</strong>
+(assault), <strong>Y18</strong> (undetermined intent). Each intent is
+also aggregated separately in the base. Note SIM stores the external
+cause (X/Y), not the T-code, as underlying cause of a poisoning death,
+so there is no T60 counterpart here.</p>
+<p><strong>X87 and the accessory file.</strong> X87 falls in the X85–X90
+assault range, which is <strong>outside</strong> the original IEXO
+extraction (T36–T65, X40–X49, X60–X69, Y10–Y19), so it was absent from
+the main SIM parquet. A scoped re-fetch of SIM 2014–2024 confirmed a
+<strong>single</strong> X87 death in SP (2022); it was saved to
+<code>resultados/SIM/sim_x87_sp_2014_2024_probe.parquet</code> and
+folded into the aggregation by <code>08_build_consolidated_base.R</code>
+(a plain row-bind — X87 is absent from the main file, so no
+double-counting). This avoided re-downloading the whole system for one
+case.</p>
 </div>
 <div id="rate-calculation" class="section level3">
 <h3>Rate calculation</h3>

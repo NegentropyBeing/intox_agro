@@ -56,6 +56,15 @@ All sources below are joined here. Variable groups can be included or excluded v
 | `sinan_n_notif_agric` | integer | SINAN | Notifications with agricultural context (`LAVOURA` field non-empty) |
 | `sinan_n_obitos` | integer | SINAN | Fatal notifications (EVOLUCAO == "2": death from the notified condition) |
 | `sim_n_obitos` | integer | SIM | Deaths from exogenous intoxication (death certificates, ICD T36–T65, X40–X49, X60–X69, Y10–Y19) |
+| `sih_n_hosp_pesticida` | integer | SIH-RD | Pesticide-specific hospitalisations: T60 principal **or** external cause X48/X68/X87/Y18 in any kept diagnosis field |
+| `sinan_n_notif_pesticida` | integer | SINAN | Pesticide-specific notifications: primary agent `AGENTE_TOX` ∈ 02–06 |
+| `sim_n_obitos_pesticida` | integer | SIM | Pesticide-specific deaths: underlying cause `CAUSABAS` ∈ X48/X68/X87/Y18 |
+
+> **Issue #7 (pesticide-specific outcomes).** The three `*_pesticida` totals above each have
+> subtype columns kept alongside them — 7 T60 subtypes (`sih_n_hosp_t60_*`), 5 SINAN agent
+> types, and 4 SIM intent codes — plus the all-ages `0_14` and case-fatality columns not
+> repeated in this summary. See **`DATA_DICTIONARY_BASE.md`** for the full, numbered list of
+> all 92 base columns and the exact case definitions.
 
 ### Health outcomes — crude rates per 100,000 population
 
@@ -167,14 +176,18 @@ All sources below are joined here. Variable groups can be included or excluded v
 | `RACA_COR` | string | Race/ethnicity (coded) |
 | `DIAG_PRINC` | string | Primary diagnosis (ICD-10) |
 | `DIAG_SECUN` | string | Secondary diagnosis (ICD-10) |
+| `CID_ASSO` | string | Associated diagnosis (ICD-10) |
 | `CID_MORTE` | string | ICD-10 code of death cause (when applicable) |
 | `MORTE` | string | In-hospital death: `"Sim"` = yes, `"Não"` = no |
 | `DIAS_PERM` | string | Length of stay (days) |
 | `QT_DIARIAS` | string | Number of daily AIH fees charged |
 | `MARCA_UTI` | string | ICU marker |
 | `VAL_TOT` | string | Total reimbursement value (BRL) |
+| `pesticida` | logical | **Pesticide-specific flag (issue #7):** `TRUE` if `DIAG_PRINC` is T60 **or** a pesticide external-cause code (X48/X68/X87/Y18) appears in `DIAG_PRINC`, `DIAG_SECUN`, or `CID_ASSO` |
 
-> For **pesticide-specific** cases, filter `substr(DIAG_PRINC, 1, 3) == "T60"`.
+> **Pesticide-specific cases:** use the `pesticida` flag. It generalises the older
+> `substr(DIAG_PRINC, 1, 3) == "T60"` rule (still valid for T60-only) by also catching
+> pesticide external-cause codes in the secondary/associated diagnosis fields.
 > Use `MUNIC_RES`, not `MUNIC_MOV`, for patient's municipality of residence.
 
 ---
@@ -201,14 +214,16 @@ Key analytical variables:
 | `ANO_NASC` | string | Patient birth year |
 | `CS_SEXO` | string | Sex: `"M"` = male, `"F"` = female |
 | `CS_RACA` | string | Race/ethnicity (coded 1–5) |
-| `AGENTE_TOX` | string | Toxic agent category code |
+| `AGENTE_TOX` | string | Primary toxic agent category. Pesticide group: `02`=agricultural, `03`=domestic, `04`=public-health, `05`=rodenticide, `06`=veterinary. Blank/`99` in ~6% of rows |
 | `LAVOURA` | string | **Crop associated with exposure** (e.g. `"112.SOJA"`, `"088.MILHO"`). Non-empty values indicate agricultural context |
 | `CIRCUNSTAN` | string | Circumstance of exposure (coded; `02` = occupational accident) |
 | `EVOLUCAO` | string | Outcome code: `1`=cure, `2`=**death from notified condition**, `3`=death from other cause, `4`=lost to follow-up, `5`=transfer, `9`=unknown |
 | `SIT_TRAB` | string | Work situation at time of exposure |
 | `HOSPITAL` | string | Hospitalised: `"1"` = yes, `"2"` = no |
+| `pesticida` | logical | **Pesticide-specific flag (issue #7):** `TRUE` if `AGENTE_TOX` ∈ {02, 03, 04, 05, 06}. Strict primary-agent match — the free-text secondary agents (`AGENTE_1/2/3`, `P_ATIVO_*`) are **not** used to recover cases where `AGENTE_TOX` is blank (that recovery was descoped) |
 
 > **EVOLUCAO coding:** `"2"` = death attributable to the intoxication. `"3"` = death from unrelated cause. Total intoxication-related deaths = `EVOLUCAO %in% c("2", "3")` or restrict to `"2"` for specificity.
+> **Pesticide cases:** use the `pesticida` flag (strict `AGENTE_TOX` 02–06).
 
 ---
 

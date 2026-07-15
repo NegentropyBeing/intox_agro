@@ -801,17 +801,17 @@ first). Sections 9 and 10 require Steps 4 and 5, respectively.</p>
 </tr>
 <tr class="odd">
 <td><code>resultados/PROD_AGRO/censo_agro_agrotox_orientacao_2017.parquet</code></td>
-<td>municipality × guidance type</td>
+<td>municipality (wide)</td>
 <td>2017</td>
 </tr>
 <tr class="even">
 <td><code>resultados/PROD_AGRO/censo_agro_manejo_solo_2017.parquet</code></td>
-<td>municipality × farming typology</td>
+<td>municipality (wide)</td>
 <td>2017</td>
 </tr>
 <tr class="odd">
 <td><code>resultados/PROD_AGRO/censo_agro_praticas_plantio_2017.parquet</code></td>
-<td>municipality × planting practice</td>
+<td>municipality (wide)</td>
 <td>2017</td>
 </tr>
 <tr class="even">
@@ -821,6 +821,12 @@ first). Sections 9 and 10 require Steps 4 and 5, respectively.</p>
 </tr>
 </tbody>
 </table>
+<blockquote>
+<p>The four <code>censo_agro_*_2017</code> additional tables
+(temporary-crop production, pesticide use × technical guidance, soil
+management, and planting practices) are documented variable-by-variable
+in <strong>Section 8 of <code>DATA_DICTIONARY.md</code></strong>.</p>
+</blockquote>
 </div>
 <div id="contextual-covariates-municipality-level" class="section level3">
 <h3>Contextual covariates (municipality-level)</h3>
@@ -876,6 +882,36 @@ parquets (use <code>município</code> → derive <code>cod_ibge</code> via
 <code>substr(município, 1, 6)</code>).</p>
 <hr />
 </div>
+</div>
+<div id="interactive-dashboard" class="section level2">
+<h2>Interactive Dashboard</h2>
+<p>A local <a href="dashboard/">Shiny dashboard</a> explores the
+consolidated base and the individual-level files without leaving your
+machine (no server, no network at runtime — it reads only
+<code>resultados/</code>). It ships as two twin apps with identical
+logic: <code>dashboard/app.R</code> (Portuguese) and
+<code>dashboard/app_EN.R</code> (English).</p>
+<ul>
+<li><strong>Overview</strong> — indicator × year across the 645
+municipalities: KPI cards, choropleth map, time series, top-15 ranking,
+and a searchable table. Selecting municipalities filters the whole
+page.</li>
+<li><strong>Relationships</strong> — pick two variables to see a
+<strong>bivariate 3×3 choropleth</strong>, a scatter with a trend line,
+and Spearman/Pearson correlation. The map exports as PNG for use as
+report figures.</li>
+<li><strong>Microdata</strong> — drill into SIH / SINAN / SIM / SISAGUA
+with lazy <code>arrow</code> filtering.</li>
+</ul>
+<p>Run it from the repo root (with <code>Agrotoxicos.Rproj</code>
+open):</p>
+<pre class="r"><code>install.packages(c(&quot;shiny&quot;, &quot;bslib&quot;, &quot;plotly&quot;, &quot;leaflet&quot;, &quot;reactable&quot;, &quot;sf&quot;,
+                   &quot;arrow&quot;, &quot;dplyr&quot;, &quot;tidyr&quot;, &quot;scales&quot;, &quot;geobr&quot;, &quot;ggplot2&quot;,
+                   &quot;patchwork&quot;))
+source(&quot;dashboard/setup_geo.R&quot;)   # one-time map cache (already committed)
+shiny::runApp(&quot;dashboard&quot;)        # Portuguese; for English open app_EN.R and Run App</code></pre>
+<p>See <a href="dashboard/README.md"><code>dashboard/README.md</code></a> for
+details.</p>
 </div>
 <div id="brazilian-health-data-infrastructure-context-for-international-analysts" class="section level2">
 <h2>Brazilian Health Data Infrastructure — Context for International
@@ -952,6 +988,20 @@ most specific for this study)</td>
 </tr>
 </tbody>
 </table>
+<hr />
+</div>
+<div id="data-availability-disclaimer" class="section level2">
+<h2>Data Availability Disclaimer</h2>
+<p>The repository automates processing wherever stable public interfaces
+were available. However, some historical data sources were not
+consistently accessible through automated download endpoints during the
+study period.</p>
+<p>SISAGUA is the main example: historical records were assembled from
+XML exports, treated and joined through a simple python script <em>(not
+in this repo)</em>. These constituted the only reliable source available
+for the period covered by the study. Consequently, full reproduction of
+the raw-data acquisition stage may require access to archival files that
+are not generated directly by the scripts in this repository.</p>
 <hr />
 </div>
 <div id="notes-for-analysts" class="section level2">

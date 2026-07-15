@@ -542,8 +542,40 @@ condition)</td>
 <td>Deaths from exogenous intoxication (death certificates, ICD T36–T65,
 X40–X49, X60–X69, Y10–Y19)</td>
 </tr>
+<tr class="odd">
+<td><code>sih_n_hosp_pesticida</code></td>
+<td>integer</td>
+<td>SIH-RD</td>
+<td>Pesticide-specific hospitalisations: T60 principal
+<strong>or</strong> external cause X48/X68/X87/Y18 in any kept diagnosis
+field</td>
+</tr>
+<tr class="even">
+<td><code>sinan_n_notif_pesticida</code></td>
+<td>integer</td>
+<td>SINAN</td>
+<td>Pesticide-specific notifications: primary agent
+<code>AGENTE_TOX</code> ∈ 02–06</td>
+</tr>
+<tr class="odd">
+<td><code>sim_n_obitos_pesticida</code></td>
+<td>integer</td>
+<td>SIM</td>
+<td>Pesticide-specific deaths: underlying cause <code>CAUSABAS</code> ∈
+X48/X68/X87/Y18</td>
+</tr>
 </tbody>
 </table>
+<blockquote>
+<p><strong>Issue #7 (pesticide-specific outcomes).</strong> The three
+<code>*_pesticida</code> totals above each have subtype columns kept
+alongside them — 7 T60 subtypes (<code>sih_n_hosp_t60_*</code>), 5 SINAN
+agent types, and 4 SIM intent codes — plus the all-ages
+<code>0_14</code> and case-fatality columns not repeated in this
+summary. See <strong><code>DATA_DICTIONARY_BASE.md</code></strong> for
+the full, numbered list of all 92 base columns and the exact case
+definitions.</p>
+</blockquote>
 </div>
 <div id="health-outcomes-crude-rates-per-100000-population" class="section level3">
 <h3>Health outcomes — crude rates per 100,000 population</h3>
@@ -997,43 +1029,59 @@ code). Use for municipality-level analysis</td>
 <td>Secondary diagnosis (ICD-10)</td>
 </tr>
 <tr class="even">
+<td><code>CID_ASSO</code></td>
+<td>string</td>
+<td>Associated diagnosis (ICD-10)</td>
+</tr>
+<tr class="odd">
 <td><code>CID_MORTE</code></td>
 <td>string</td>
 <td>ICD-10 code of death cause (when applicable)</td>
 </tr>
-<tr class="odd">
+<tr class="even">
 <td><code>MORTE</code></td>
 <td>string</td>
 <td>In-hospital death: <code>&quot;Sim&quot;</code> = yes, <code>&quot;Não&quot;</code> =
 no</td>
 </tr>
-<tr class="even">
+<tr class="odd">
 <td><code>DIAS_PERM</code></td>
 <td>string</td>
 <td>Length of stay (days)</td>
 </tr>
-<tr class="odd">
+<tr class="even">
 <td><code>QT_DIARIAS</code></td>
 <td>string</td>
 <td>Number of daily AIH fees charged</td>
 </tr>
-<tr class="even">
+<tr class="odd">
 <td><code>MARCA_UTI</code></td>
 <td>string</td>
 <td>ICU marker</td>
 </tr>
-<tr class="odd">
+<tr class="even">
 <td><code>VAL_TOT</code></td>
 <td>string</td>
 <td>Total reimbursement value (BRL)</td>
 </tr>
+<tr class="odd">
+<td><code>pesticida</code></td>
+<td>logical</td>
+<td><strong>Pesticide-specific flag (issue #7):</strong>
+<code>TRUE</code> if <code>DIAG_PRINC</code> is T60 <strong>or</strong>
+a pesticide external-cause code (X48/X68/X87/Y18) appears in
+<code>DIAG_PRINC</code>, <code>DIAG_SECUN</code>, or
+<code>CID_ASSO</code></td>
+</tr>
 </tbody>
 </table>
 <blockquote>
-<p>For <strong>pesticide-specific</strong> cases, filter
-<code>substr(DIAG_PRINC, 1, 3) == &quot;T60&quot;</code>. Use
-<code>MUNIC_RES</code>, not <code>MUNIC_MOV</code>, for patient’s
-municipality of residence.</p>
+<p><strong>Pesticide-specific cases:</strong> use the
+<code>pesticida</code> flag. It generalises the older
+<code>substr(DIAG_PRINC, 1, 3) == &quot;T60&quot;</code> rule (still valid for
+T60-only) by also catching pesticide external-cause codes in the
+secondary/associated diagnosis fields. Use <code>MUNIC_RES</code>, not
+<code>MUNIC_MOV</code>, for patient’s municipality of residence.</p>
 </blockquote>
 <hr />
 </div>
@@ -1112,7 +1160,10 @@ code). Use for municipality-level analysis</td>
 <tr class="even">
 <td><code>AGENTE_TOX</code></td>
 <td>string</td>
-<td>Toxic agent category code</td>
+<td>Primary toxic agent category. Pesticide group:
+<code>02</code>=agricultural, <code>03</code>=domestic,
+<code>04</code>=public-health, <code>05</code>=rodenticide,
+<code>06</code>=veterinary. Blank/<code>99</code> in ~6% of rows</td>
 </tr>
 <tr class="odd">
 <td><code>LAVOURA</code></td>
@@ -1145,6 +1196,16 @@ notified condition</strong>, <code>3</code>=death from other cause,
 <td>string</td>
 <td>Hospitalised: <code>&quot;1&quot;</code> = yes, <code>&quot;2&quot;</code> = no</td>
 </tr>
+<tr class="even">
+<td><code>pesticida</code></td>
+<td>logical</td>
+<td><strong>Pesticide-specific flag (issue #7):</strong>
+<code>TRUE</code> if <code>AGENTE_TOX</code> ∈ {02, 03, 04, 05, 06}.
+Strict primary-agent match — the free-text secondary agents
+(<code>AGENTE_1/2/3</code>, <code>P_ATIVO_*</code>) are
+<strong>not</strong> used to recover cases where <code>AGENTE_TOX</code>
+is blank (that recovery was descoped)</td>
+</tr>
 </tbody>
 </table>
 <blockquote>
@@ -1152,7 +1213,8 @@ notified condition</strong>, <code>3</code>=death from other cause,
 attributable to the intoxication. <code>&quot;3&quot;</code> = death from
 unrelated cause. Total intoxication-related deaths =
 <code>EVOLUCAO %in% c(&quot;2&quot;, &quot;3&quot;)</code> or restrict to <code>&quot;2&quot;</code>
-for specificity.</p>
+for specificity. <strong>Pesticide cases:</strong> use the
+<code>pesticida</code> flag (strict <code>AGENTE_TOX</code> 02–06).</p>
 </blockquote>
 <hr />
 </div>
@@ -1544,21 +1606,355 @@ SIDRA tables 6851 (pesticide use) and 6899 (expenditures)</p>
 </div>
 <div id="censo-agropecuário-2017-additional-tables" class="section level2">
 <h2>8. Censo Agropecuário 2017 — Additional Tables</h2>
-<p><strong>Files:</strong> -
-<code>resultados/PROD_AGRO/censo_agro_lavoura_2017.parquet</code> —
-municipality × temporary crop, variables: <code>num_estab</code>,
-<code>qtd_produzida</code>, <code>qtd_vendida</code>,
-<code>valor_prod_mil_reais</code>, <code>valor_venda_mil_reais</code>,
-<code>area_colhida_ha</code> -
-<code>resultados/PROD_AGRO/censo_agro_agrotox_orientacao_2017.parquet</code>
-— municipality × guidance type for pesticide use -
-<code>resultados/PROD_AGRO/censo_agro_manejo_solo_2017.parquet</code> —
-municipality × soil management practice -
-<code>resultados/PROD_AGRO/censo_agro_praticas_plantio_2017.parquet</code>
-— municipality × planting practice</p>
-<p>All fixed to 2017. Use <code>cod_ibge</code> to join with other
-files.</p>
+<p>All four files are single 2017 cross-sections (use as fixed
+covariates) and are derived from the IBGE Censo Agropecuário 2017
+(SIDRA). Join to other files with <code>cod_ibge</code> (6-digit IBGE
+code). Each file has 640 municipalities — the 5 missing rows are
+municipalities whose values were entirely suppressed for statistical
+confidentiality. Throughout, <code>NA</code> = category not applicable,
+zero, or suppressed.</p>
+<blockquote>
+<p><strong>Note on “lavoura temporária” (temporary crops):</strong>
+annual/short-cycle crops harvested within ~12 months (e.g. maize,
+soybean, sugarcane, beans, vegetables), as opposed to permanent crops
+(e.g. coffee, citrus). This Census set covers temporary crops only.</p>
+</blockquote>
+<div id="censo_agro_lavoura_2017.parquet-temporary-crop-production" class="section level3">
+<h3>8.1 <code>censo_agro_lavoura_2017.parquet</code> — Temporary-crop
+production</h3>
+<p><strong>Grain:</strong> one row per municipality × crop.
+<strong>Source:</strong> SIDRA table 6957. Use
+<code>filter(produto == &quot;Total&quot;)</code> for municipal totals across all
+temporary crops.</p>
+<table>
+<colgroup>
+<col width="33%" />
+<col width="33%" />
+<col width="33%" />
+</colgroup>
+<thead>
+<tr class="header">
+<th>Variable</th>
+<th>Type</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td><code>cod_ibge</code></td>
+<td>string</td>
+<td>6-digit IBGE municipality code</td>
+</tr>
+<tr class="even">
+<td><code>nome_municipio</code></td>
+<td>string</td>
+<td>Municipality name (with <code>(SP)</code> suffix)</td>
+</tr>
+<tr class="odd">
+<td><code>produto</code></td>
+<td>string</td>
+<td>Crop name; <code>&quot;Total&quot;</code> = sum across all temporary
+crops</td>
+</tr>
+<tr class="even">
+<td><code>num_estab</code></td>
+<td>double</td>
+<td>Number of agricultural establishments growing that crop (count)</td>
+</tr>
+<tr class="odd">
+<td><code>qtd_produzida</code></td>
+<td>double</td>
+<td>Quantity produced — <strong>units vary by crop</strong> (tonnes,
+thousand fruits, thousand bunches…); consult SIDRA 6957 metadata</td>
+</tr>
+<tr class="even">
+<td><code>qtd_vendida</code></td>
+<td>double</td>
+<td>Quantity sold (subset of produced); same unit as
+<code>qtd_produzida</code></td>
+</tr>
+<tr class="odd">
+<td><code>valor_prod_mil_reais</code></td>
+<td>double</td>
+<td>Value of production (thousands BRL, 2017 prices)</td>
+</tr>
+<tr class="even">
+<td><code>valor_venda_mil_reais</code></td>
+<td>double</td>
+<td>Value of sales (thousands BRL, 2017 prices)</td>
+</tr>
+<tr class="odd">
+<td><code>area_colhida_ha</code></td>
+<td>double</td>
+<td>Harvested area (hectares)</td>
+</tr>
+<tr class="even">
+<td><code>ano</code></td>
+<td>integer</td>
+<td>Reference year (always 2017)</td>
+</tr>
+</tbody>
+</table>
+</div>
+<div id="censo_agro_agrotox_orientacao_2017.parquet-pesticide-use-source-of-technical-guidance" class="section level3">
+<h3>8.2 <code>censo_agro_agrotox_orientacao_2017.parquet</code> —
+Pesticide use × source of technical guidance</h3>
+<p><strong>Grain:</strong> one row per municipality.
+<strong>Source:</strong> SIDRA table 6852. Counts are <strong>number of
+establishments</strong>. Columns are named
+<code>&lt;usegroup&gt;_&lt;guidance&gt;</code>, i.e. the
+cross-tabulation of a pesticide-use group by the source of technical
+guidance received. <code>total_total</code> is the overall establishment
+count.</p>
+<p><strong>Pesticide-use groups</strong> (column prefix):</p>
+<table>
+<thead>
+<tr class="header">
+<th>Prefix</th>
+<th>Meaning</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td><code>total</code></td>
+<td>All establishments</td>
+</tr>
+<tr class="even">
+<td><code>utilizou</code></td>
+<td>Used pesticides</td>
+</tr>
+<tr class="odd">
+<td><code>nao_utilizou</code></td>
+<td>Did not use pesticides</td>
+</tr>
+<tr class="even">
+<td><code>nao_utilizou_nao_usa</code></td>
+<td>Did not use — does not use as a rule</td>
+</tr>
+<tr class="odd">
+<td><code>nao_utilizou_nao_precisou</code></td>
+<td>Did not use — had no need</td>
+</tr>
+</tbody>
+</table>
+<p><strong>Guidance source</strong> (column suffix — establishments that
+received technical guidance from…):</p>
+<table>
+<thead>
+<tr class="header">
+<th>Suffix</th>
+<th>Meaning</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td><code>total</code></td>
+<td>Any/total (all guidance statuses)</td>
+</tr>
+<tr class="even">
+<td><code>recebe</code></td>
+<td>Receives technical guidance (any source)</td>
+</tr>
+<tr class="odd">
+<td><code>governo</code></td>
+<td>Government extension service</td>
+</tr>
+<tr class="even">
+<td><code>propria</code></td>
+<td>Own/self (producer’s own knowledge)</td>
+</tr>
+<tr class="odd">
+<td><code>cooperativas</code></td>
+<td>Cooperatives</td>
+</tr>
+<tr class="even">
+<td><code>integradoras</code></td>
+<td>Integrator companies</td>
+</tr>
+<tr class="odd">
+<td><code>empresas_privadas</code></td>
+<td>Private firms</td>
+</tr>
+<tr class="even">
+<td><code>ong</code></td>
+<td>NGOs</td>
+</tr>
+<tr class="odd">
+<td><code>sistema_s</code></td>
+<td>“Sistema S” (SENAR/SEBRAE etc.)</td>
+</tr>
+<tr class="even">
+<td><code>outra</code></td>
+<td>Other source</td>
+</tr>
+<tr class="odd">
+<td><code>nao_recebe</code></td>
+<td>Does not receive technical guidance</td>
+</tr>
+</tbody>
+</table>
+<p>Plus <code>cod_ibge</code>, <code>nome_municipio</code>,
+<code>ano</code>.</p>
+</div>
+<div id="censo_agro_manejo_solo_2017.parquet-soil-management-practices" class="section level3">
+<h3>8.3 <code>censo_agro_manejo_solo_2017.parquet</code> — Soil
+management practices</h3>
+<p><strong>Grain:</strong> one row per municipality.
+<strong>Source:</strong> SIDRA table 6855 (municipal totals across the
+family-farming typology breakdown). Counts are <strong>number of
+establishments</strong>, except <code>plantio_direto_ha</code>.</p>
+<table>
+<colgroup>
+<col width="33%" />
+<col width="33%" />
+<col width="33%" />
+</colgroup>
+<thead>
+<tr class="header">
+<th>Variable</th>
+<th>Type</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td><code>cod_ibge</code></td>
+<td>string</td>
+<td>6-digit IBGE municipality code</td>
+</tr>
+<tr class="even">
+<td><code>nome_municipio</code></td>
+<td>string</td>
+<td>Municipality name (with <code>(SP)</code> suffix)</td>
+</tr>
+<tr class="odd">
+<td><code>nao_preparou_solo</code></td>
+<td>double</td>
+<td>Establishments that did <strong>not</strong> prepare the soil
+(count)</td>
+</tr>
+<tr class="even">
+<td><code>preparou_solo</code></td>
+<td>double</td>
+<td>Establishments that prepared the soil (count)</td>
+</tr>
+<tr class="odd">
+<td><code>cultivo_convencional</code></td>
+<td>double</td>
+<td>Establishments using conventional tillage (count)</td>
+</tr>
+<tr class="even">
+<td><code>cultivo_minimo</code></td>
+<td>double</td>
+<td>Establishments using minimum tillage (count)</td>
+</tr>
+<tr class="odd">
+<td><code>plantio_direto_n_estab</code></td>
+<td>double</td>
+<td>Establishments using no-till / direct planting (count)</td>
+</tr>
+<tr class="even">
+<td><code>plantio_direto_ha</code></td>
+<td>double</td>
+<td>Area under no-till / direct planting (hectares)</td>
+</tr>
+<tr class="odd">
+<td><code>ano</code></td>
+<td>integer</td>
+<td>Reference year (always 2017)</td>
+</tr>
+</tbody>
+</table>
+</div>
+<div id="censo_agro_praticas_plantio_2017.parquet-planting-conservation-practices" class="section level3">
+<h3>8.4 <code>censo_agro_praticas_plantio_2017.parquet</code> — Planting
+/ conservation practices</h3>
+<p><strong>Grain:</strong> one row per municipality.
+<strong>Source:</strong> SIDRA table 6845. All values are <strong>number
+of establishments</strong> adopting each practice.</p>
+<table>
+<colgroup>
+<col width="33%" />
+<col width="33%" />
+<col width="33%" />
+</colgroup>
+<thead>
+<tr class="header">
+<th>Variable</th>
+<th>Type</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td><code>cod_ibge</code></td>
+<td>string</td>
+<td>6-digit IBGE municipality code</td>
+</tr>
+<tr class="even">
+<td><code>nome_municipio</code></td>
+<td>string</td>
+<td>Municipality name (with <code>(SP)</code> suffix)</td>
+</tr>
+<tr class="odd">
+<td><code>plantio_nivel</code></td>
+<td>double</td>
+<td>Contour planting (planting along level lines)</td>
+</tr>
+<tr class="even">
+<td><code>rotacao_culturas</code></td>
+<td>double</td>
+<td>Crop rotation</td>
+</tr>
+<tr class="odd">
+<td><code>pousio_descanso</code></td>
+<td>double</td>
+<td>Fallow / land resting</td>
+</tr>
+<tr class="even">
+<td><code>protecao_encostas</code></td>
+<td>double</td>
+<td>Slope/hillside protection</td>
+</tr>
+<tr class="odd">
+<td><code>recuperacao_mata_ciliar</code></td>
+<td>double</td>
+<td>Riparian-forest (riverbank) recovery</td>
+</tr>
+<tr class="even">
+<td><code>reflorestamento_nascentes</code></td>
+<td>double</td>
+<td>Reforestation around springs/headwaters</td>
+</tr>
+<tr class="odd">
+<td><code>estabilizacao_vocorocas</code></td>
+<td>double</td>
+<td>Gully (voçoroca) stabilization</td>
+</tr>
+<tr class="even">
+<td><code>manejo_florestal</code></td>
+<td>double</td>
+<td>Forest management</td>
+</tr>
+<tr class="odd">
+<td><code>outra_pratica</code></td>
+<td>double</td>
+<td>Other practice</td>
+</tr>
+<tr class="even">
+<td><code>nenhuma_pratica</code></td>
+<td>double</td>
+<td>No conservation practice adopted</td>
+</tr>
+<tr class="odd">
+<td><code>ano</code></td>
+<td>integer</td>
+<td>Reference year (always 2017)</td>
+</tr>
+</tbody>
+</table>
 <hr />
+</div>
 </div>
 <div id="caged-monthly-employment-records-individual-level" class="section level2">
 <h2>9. CAGED — Monthly Employment Records (individual-level)</h2>
