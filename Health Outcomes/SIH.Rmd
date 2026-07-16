@@ -44,6 +44,18 @@ SIH_clean <- SIH |>
          CID_MORTE,
          MORTE,
          DIAS_PERM)
+
+table(SIH_clean$COD_IDADE, useNA = "ifany")
+
+SIH_clean <- SIH_clean %>%
+  filter(
+    DIAG_PRINC %in% c(
+      "T600", "T601", "T603", "T604", "T608", "T609",
+      "X48", "X68", "X87", "X18"))
+
+SIH_clean <- SIH_clean %>%
+  filter(COD_IDADE %in% c("Dias", "Meses") |
+           (COD_IDADE == "Anos" & IDADE >= 0 & IDADE <= 14))
 ```
 
 ## Using Consolidated for Analyses
@@ -145,6 +157,26 @@ poisoning_summary %>%
 ## Plot
 
 ```{r}
+#raw
+hosp_summary <- consolidada %>%
+  group_by(ano) %>%
+  summarise(
+    total_hosp = sum(sih_n_hosp_0_14, na.rm = TRUE),
+    .groups = "drop"
+  )
+
+ggplot(hosp_summary, aes(x = ano, y = total_hosp, group = 1)) +
+  geom_line(linewidth = 1.2, color = "steelblue") +
+  geom_point(size = 3, color = "steelblue") +
+  scale_x_continuous(breaks = unique(hosp_summary$ano)) +
+  labs(
+    x = "Year",
+    y = "Hospitalizations (n)",
+    title = "Hospitalizations among children aged 0–14 years"
+  ) +
+  theme_minimal(base_size = 14)
+
+#quartiles
 ggplot(poisoning_summary,
        aes(x = ano, y = Median, color = factor(Quartile))) +
   geom_line() +
@@ -153,7 +185,7 @@ ggplot(poisoning_summary,
     breaks = unique(sort(poisoning_summary$ano))
   ) +
   labs(
-    title = "Hospitalization Rate Ages 0-14 years per 100K",
+    title = "Median Hospitalization Rate Ages 0-14 years per 100K",
     x = "Year",
     y = "Median Hospitalization Rate per 100K",
     color = "Quartile"
@@ -184,8 +216,9 @@ ggplot(summary_quartile,
   geom_point(size = 2) +
   scale_x_continuous(breaks = unique(summary_quartile$ano)) +
   labs(
+    title = "Median Hospitalization Rate Ages 0-14 years per 100K",
     x = "Year",
-    y = "Value",
+    y = "Hospitalizaitons per 100K",
     color = "Quartile"
   ) +
   theme_minimal()
@@ -197,7 +230,7 @@ ggplot(poisoning,
   geom_boxplot(position = position_dodge(width = 0.8)) +
   labs(
     x = "Year",
-    y = "Value",
+    y = "Hospitalizaitons per 100K",
     fill = "Quartile"
   ) +
   theme_minimal()
