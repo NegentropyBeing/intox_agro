@@ -84,6 +84,23 @@ removed only 273 records — patients from other states treated in SP for intoxi
 - `munRes*` geolocation fields (latitude, longitude, altitude, area) were dropped as
   municipality-level geographic joins use `MUNIC_RES` directly.
 
+### Pesticide-specific hospitalisations (issue #7)
+
+Confirmed with the study advisor (2026-07-15). A hospitalisation is flagged pesticide-specific
+(`pesticida` in the individual file; aggregated as `sih_n_hosp_pesticida` in the base) when
+**either**:
+
+- the principal diagnosis (`DIAG_PRINC`) is **T60** (any subtype), **or**
+- a pesticide external-cause code — **X48** (accidental), **X68** (intentional self-poisoning),
+  **X87** (assault), **Y18** (undetermined intent) — appears in the principal (`DIAG_PRINC`),
+  secondary (`DIAG_SECUN`), or associated (`CID_ASSO`) diagnosis field.
+
+No re-download was needed: because the original ICD filter keys on the principal diagnosis and
+poisoning admissions carry a T-code there, all such admissions were already captured; the
+external-cause codes live in the secondary/associated fields that were retained. T60 subtypes
+are aggregated separately in the base (`sih_n_hosp_t60_0` … `_t60_9`) so agents can be analysed
+individually. The broad `sih_n_hosp` (all exogenous intoxication) is kept unchanged alongside.
+
 ---
 
 ## 4. Notified intoxication cases — SINAN (DATASUS)
@@ -116,6 +133,24 @@ relevant columns were retained, including:
 `ID_MN_RESI` is the municipality of **residence**, not of exposure. For occupational
 cases, `MUN_EMP` (employer's municipality) may be more appropriate as the exposure
 geography.
+
+### Pesticide-specific notifications (issue #7)
+
+Confirmed with the study advisor (2026-07-15). A notification is flagged pesticide-specific
+(`pesticida` in the individual file; aggregated as `sinan_n_notif_pesticida` in the base) when
+the **primary toxic agent** `AGENTE_TOX` is in the pesticide group: **02** (agricultural),
+**03** (domestic), **04** (public-health), **05** (rodenticide), **06** (veterinary). These
+five agent types are also aggregated separately in the base.
+
+**Strict primary-agent match.** `AGENTE_TOX` is blank or `99` in ~6% of records (27,050 of
+464,602). The advisor asked whether pesticide cases could be recovered from secondary agent
+fields when the primary is blank. On inspection this was **not feasible as a clean coded
+match**: the coded secondary field (`COAGTOXMA1/2/3`) is populated in only ~20 of those blank
+rows and uses a different product-code scheme, while the usable secondary information
+(`AGENTE_1/2/3`, `P_ATIVO_*`) is **free text** (e.g. "CHUMBINHO", "RATICIDA", "HERBICIDA").
+Free-text recovery would require a curated keyword dictionary with attendant false-positive/
+negative risk, and was **descoped** for the current phase. The counts are therefore a
+conservative lower bound for blank-agent records.
 
 ---
 
@@ -397,6 +432,22 @@ parquet. The following fields are retained where available:
 | `OCUP` | Occupation (CBO code) |
 | `ACIDTRAB` | Work accident flag |
 | `CIRCOBITO` | Death circumstances |
+
+### Pesticide-specific deaths (issue #7)
+
+Confirmed with the study advisor (2026-07-15). A death is flagged pesticide-specific
+(`sim_n_obitos_pesticida` in the base) when the underlying cause `CAUSABAS` is a pesticide
+external-cause code: **X48** (accidental), **X68** (intentional self-poisoning), **X87**
+(assault), **Y18** (undetermined intent). Each intent is also aggregated separately in the
+base. Note SIM stores the external cause (X/Y), not the T-code, as underlying cause of a
+poisoning death, so there is no T60 counterpart here.
+
+**X87 and the accessory file.** X87 falls in the X85–X90 assault range, which is **outside**
+the original IEXO extraction (T36–T65, X40–X49, X60–X69, Y10–Y19), so it was absent from the
+main SIM parquet. A scoped re-fetch of SIM 2014–2024 confirmed a **single** X87 death in SP
+(2022); it was saved to `resultados/SIM/sim_x87_sp_2014_2024_probe.parquet` and folded into
+the aggregation by `08_build_consolidated_base.R` (a plain row-bind — X87 is absent from the
+main file, so no double-counting). This avoided re-downloading the whole system for one case.
 
 ### Rate calculation
 

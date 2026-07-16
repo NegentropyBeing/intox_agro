@@ -19,6 +19,10 @@ library(dplyr)
 library(tidyr)
 library(readxl)
 
+# Pesticide-specific ICD-10 external-cause codes (issue #7, confirmed by advisor 2026-07-15):
+#   X48 accidental, X68 intentional self-poisoning, X87 assault, Y18 undetermined intent.
+PEST_EXT_CODES <- c("X48", "X68", "X87", "Y18")
+
 # ===========================================================================
 # PART 1: SPINE — all SP municipalities × years 2014-2024
 # ===========================================================================
@@ -62,13 +66,29 @@ sih_agg <- read_parquet("resultados/SIH/sih_iexo_sp_2014_2024.parquet") |>
     # Age 0-14 flag. Age is decoded in this file: COD_IDADE is "Dias"/"Meses"
     # (infants <1yr) or "Anos" (IDADE in years); "Centena de anos" (100+) excluded.
     is_0_14  = COD_IDADE %in% c("Dias", "Meses") |
-               (COD_IDADE == "Anos" & suppressWarnings(as.integer(IDADE)) <= 14)
+               (COD_IDADE == "Anos" & suppressWarnings(as.integer(IDADE)) <= 14),
+    # Pesticide-specific (issue #7): T60 principal diagnosis OR pesticide external
+    # cause (X48/X68/X87/Y18) in principal, secondary, or associated diagnosis.
+    is_pesticida = substr(DIAG_PRINC, 1, 3) == "T60" |
+                   substr(DIAG_PRINC, 1, 3) %in% PEST_EXT_CODES |
+                   substr(DIAG_SECUN, 1, 3) %in% PEST_EXT_CODES |
+                   substr(CID_ASSO,   1, 3) %in% PEST_EXT_CODES
   ) |>
   group_by(cod_ibge, ano) |>
   summarise(
     sih_n_hosp             = n(),
     sih_n_hosp_0_14        = sum(is_0_14, na.rm = TRUE),
     sih_n_hosp_t60         = sum(substr(DIAG_PRINC, 1, 3) == "T60", na.rm = TRUE),
+    sih_n_hosp_pesticida   = sum(is_pesticida, na.rm = TRUE),
+    # T60 subtypes kept separate (issue #7 point 5) for agent-specific analysis.
+    # DATASUS stores ICD without the dot: "T600".."T609"; bare "T60" = unspecified.
+    sih_n_hosp_t60_0       = sum(DIAG_PRINC == "T600", na.rm = TRUE),  # organophosphate/carbamate insecticides
+    sih_n_hosp_t60_1       = sum(DIAG_PRINC == "T601", na.rm = TRUE),  # halogenated insecticides
+    sih_n_hosp_t60_2       = sum(DIAG_PRINC == "T602", na.rm = TRUE),  # other insecticides
+    sih_n_hosp_t60_3       = sum(DIAG_PRINC == "T603", na.rm = TRUE),  # herbicides and fungicides
+    sih_n_hosp_t60_4       = sum(DIAG_PRINC == "T604", na.rm = TRUE),  # rodenticides
+    sih_n_hosp_t60_8       = sum(DIAG_PRINC == "T608", na.rm = TRUE),  # other pesticides
+    sih_n_hosp_t60_9       = sum(DIAG_PRINC %in% c("T609", "T60"), na.rm = TRUE),  # pesticide, unspecified
     sih_n_obitos_hosp      = sum(MORTE == "Sim", na.rm = TRUE),
     sih_n_obitos_hosp_0_14 = sum(is_0_14 & MORTE == "Sim", na.rm = TRUE),
     sih_dias_perm_media    = mean(suppressWarnings(as.numeric(DIAS_PERM)), na.rm = TRUE),
@@ -91,6 +111,15 @@ sinan_agg <- read_parquet("resultados/SINAN/sinan_iexo_sp_2014_2024.parquet") |>
     sinan_n_notif_0_14  = sum(NU_IDADE_N <= 4014, na.rm = TRUE),
     sinan_n_notif_agric = sum(!is.na(LAVOURA) & trimws(as.character(LAVOURA)) != "",
                               na.rm = TRUE),
+    # Pesticide-specific (issue #7): primary toxic agent (AGENTE_TOX) in pesticide
+    # group. Strict primary-agent match; free-text secondary-agent recovery not applied.
+    sinan_n_notif_pesticida         = sum(AGENTE_TOX %in% c("02","03","04","05","06"), na.rm = TRUE),
+    # Agent subtypes kept separate (issue #7 point 5).
+    sinan_n_notif_agrotox_agricola  = sum(AGENTE_TOX == "02", na.rm = TRUE),  # agricultural pesticide
+    sinan_n_notif_agrotox_domestico = sum(AGENTE_TOX == "03", na.rm = TRUE),  # domestic/garden pesticide
+    sinan_n_notif_agrotox_saudepub  = sum(AGENTE_TOX == "04", na.rm = TRUE),  # public-health pesticide
+    sinan_n_notif_raticida          = sum(AGENTE_TOX == "05", na.rm = TRUE),  # rodenticide
+    sinan_n_notif_prod_veterinario  = sum(AGENTE_TOX == "06", na.rm = TRUE),  # veterinary product
     sinan_n_obitos      = sum(EVOLUCAO == "2", na.rm = TRUE),
     .groups = "drop"
   )
@@ -98,10 +127,23 @@ sinan_agg <- read_parquet("resultados/SINAN/sinan_iexo_sp_2014_2024.parquet") |>
 cat("SINAN:", nrow(sinan_agg), "municipality-years\n")
 
 # --- 2c. SIM: deaths ---
-sim_agg <- read_parquet("resultados/SIM/sim_iexo_sp_2014_2024.parquet") |>
+# Main SIM file (IEXO CAUSABAS) + X87 accessory. X87 (assault by pesticide) is
+# outside the original IEXO extraction range (X85-X90 not downloaded); the single
+# 2014-2024 SP case was fetched separately (issue #7) to avoid re-downloading the
+# whole system. The accessory contains only X87, which is absent from the main
+# file, so a plain row-bind cannot double-count.
+sim_raw <- read_parquet("resultados/SIM/sim_iexo_sp_2014_2024.parquet")
+sim_x87_path <- "resultados/SIM/sim_x87_sp_2014_2024_probe.parquet"
+if (file.exists(sim_x87_path)) {
+  sim_raw <- bind_rows(sim_raw, read_parquet(sim_x87_path))
+  cat("SIM: folded X87 accessory (", nrow(read_parquet(sim_x87_path)), "row[s])\n")
+}
+
+sim_agg <- sim_raw |>
   mutate(
     cod_ibge = as.character(CODMUNRES),
-    ano      = as.integer(substr(as.character(DTOBITO), 1, 4))
+    ano      = as.integer(substr(as.character(DTOBITO), 1, 4)),
+    cb3      = substr(as.character(CAUSABAS), 1, 3)
   ) |>
   filter(!is.na(ano), ano %in% 2014:2024) |>
   group_by(cod_ibge, ano) |>
@@ -109,6 +151,13 @@ sim_agg <- read_parquet("resultados/SIM/sim_iexo_sp_2014_2024.parquet") |>
     sim_n_obitos      = n(),
     # Pediatric (0-14). IDADEanos already decoded to years; NA age excluded.
     sim_n_obitos_0_14 = sum(suppressWarnings(as.integer(IDADEanos)) <= 14, na.rm = TRUE),
+    # Pesticide-specific (issue #7): pesticide external-cause codes in CAUSABAS.
+    sim_n_obitos_pesticida          = sum(cb3 %in% PEST_EXT_CODES, na.rm = TRUE),
+    # Death by intent kept separate (issue #7 point 5).
+    sim_n_obitos_pest_acidental     = sum(cb3 == "X48", na.rm = TRUE),  # accidental
+    sim_n_obitos_pest_autoprovocado = sum(cb3 == "X68", na.rm = TRUE),  # intentional self-poisoning
+    sim_n_obitos_pest_agressao      = sum(cb3 == "X87", na.rm = TRUE),  # assault
+    sim_n_obitos_pest_indeterminado = sum(cb3 == "Y18", na.rm = TRUE),  # undetermined intent
     .groups = "drop"
   )
 
@@ -294,10 +343,17 @@ base <- spine |>
 # Replace NA with 0 for count outcomes only
 # (municipalities with no recorded events are truly zero, not missing)
 count_vars <- c(
-  "sih_n_hosp", "sih_n_hosp_0_14", "sih_n_hosp_t60",
+  "sih_n_hosp", "sih_n_hosp_0_14", "sih_n_hosp_t60", "sih_n_hosp_pesticida",
+  "sih_n_hosp_t60_0", "sih_n_hosp_t60_1", "sih_n_hosp_t60_2", "sih_n_hosp_t60_3",
+  "sih_n_hosp_t60_4", "sih_n_hosp_t60_8", "sih_n_hosp_t60_9",
   "sih_n_obitos_hosp", "sih_n_obitos_hosp_0_14",
   "sinan_n_notif", "sinan_n_notif_0_14", "sinan_n_notif_agric", "sinan_n_obitos",
-  "sim_n_obitos", "sim_n_obitos_0_14",
+  "sinan_n_notif_pesticida",
+  "sinan_n_notif_agrotox_agricola", "sinan_n_notif_agrotox_domestico",
+  "sinan_n_notif_agrotox_saudepub", "sinan_n_notif_raticida", "sinan_n_notif_prod_veterinario",
+  "sim_n_obitos", "sim_n_obitos_0_14", "sim_n_obitos_pesticida",
+  "sim_n_obitos_pest_acidental", "sim_n_obitos_pest_autoprovocado",
+  "sim_n_obitos_pest_agressao", "sim_n_obitos_pest_indeterminado",
   "sisagua_n_amostras", "sisagua_n_amostras_detect", "sisagua_n_pesticidas_detect"
 )
 base <- base |>
@@ -358,6 +414,38 @@ vars_outcomes_count <- c(
   "sinan_n_obitos",      # fatal notifications (EVOLUCAO == 2)
   "sim_n_obitos",        # deaths from intoxication (death certificates)
   "sim_n_obitos_0_14"    # deaths from intoxication, ages 0-14 only
+)
+
+# Pesticide-specific outcome totals (issue #7): the pesticide-only counterpart of
+# the broad exogenous-intoxication counts above. Kept alongside (not replacing) them.
+vars_outcomes_pesticida <- c(
+  "sih_n_hosp_pesticida",    # SIH hospitalisations, pesticide-specific (T60 or ext-cause X48/X68/X87/Y18)
+  "sinan_n_notif_pesticida", # SINAN notifications, pesticide agents (AGENTE_TOX 02-06)
+  "sim_n_obitos_pesticida"   # SIM deaths, pesticide external causes (X48/X68/X87/Y18)
+)
+
+# Pesticide subtypes kept separate (issue #7 point 5) for agent/intent-specific
+# analysis. Comment out this whole group for a leaner base (totals above suffice).
+vars_outcomes_pesticida_subtipos <- c(
+  # SIH — T60 subtype (ICD-10 4th digit)
+  "sih_n_hosp_t60_0", # organophosphate & carbamate insecticides (T60.0)
+  "sih_n_hosp_t60_1", # halogenated insecticides (T60.1)
+  "sih_n_hosp_t60_2", # other insecticides (T60.2)
+  "sih_n_hosp_t60_3", # herbicides & fungicides (T60.3)
+  "sih_n_hosp_t60_4", # rodenticides (T60.4)
+  "sih_n_hosp_t60_8", # other pesticides (T60.8)
+  "sih_n_hosp_t60_9", # pesticide, unspecified (T60.9 / bare T60)
+  # SINAN — agent type (AGENTE_TOX)
+  "sinan_n_notif_agrotox_agricola",  # agricultural pesticide (02)
+  "sinan_n_notif_agrotox_domestico", # domestic/garden pesticide (03)
+  "sinan_n_notif_agrotox_saudepub",  # public-health pesticide (04)
+  "sinan_n_notif_raticida",          # rodenticide (05)
+  "sinan_n_notif_prod_veterinario",  # veterinary product (06)
+  # SIM — pesticide death by intent (ICD-10 external cause)
+  "sim_n_obitos_pest_acidental",     # accidental (X48)
+  "sim_n_obitos_pest_autoprovocado", # intentional self-poisoning (X68)
+  "sim_n_obitos_pest_agressao",      # assault (X87)
+  "sim_n_obitos_pest_indeterminado"  # undetermined intent (Y18)
 )
 
 vars_rates <- c(
@@ -449,6 +537,8 @@ vars_final <- c(
   vars_identifiers,     # always include
   vars_population,      # comment to exclude
   vars_outcomes_count,  # comment to exclude
+  vars_outcomes_pesticida,          # issue #7: pesticide-specific totals
+  vars_outcomes_pesticida_subtipos, # issue #7: pesticide subtypes (comment to exclude)
   vars_rates,           # comment to exclude
   vars_sisagua,         # comment to exclude
   vars_pam,             # comment to exclude

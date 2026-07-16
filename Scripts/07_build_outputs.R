@@ -18,6 +18,12 @@ IEXO_ICD_CODES <- c(
   paste0("Y", 10:19)
 )
 
+# Pesticide-specific ICD-10 external-cause codes (issue #7, confirmed by advisor 2026-07-15):
+#   X48 accidental, X68 intentional self-poisoning, X87 assault, Y18 undetermined intent.
+# Note X87 falls OUTSIDE IEXO_ICD_CODES (X85-X90 not extracted); a single 2014-2024 SP
+# case is handled via the accessory parquet in Scripts/08 (no full re-download needed).
+PEST_EXT_CODES <- c("X48", "X68", "X87", "Y18")
+
 # SIH columns kept for epidemiological analysis (selected from 121 original columns)
 SIH_COLUMNS_KEEP <- c(
   "N_AIH",
@@ -63,7 +69,16 @@ sih_out <- sih_raw |>
     substr(DIAG_PRINC, 1, 3) %in% IEXO_ICD_CODES,
     substr(MUNIC_RES, 1, 2) == "35"
   ) |>
-  select(all_of(SIH_COLUMNS_KEEP))
+  select(all_of(SIH_COLUMNS_KEEP)) |>
+  mutate(
+    # Pesticide-specific flag (issue #7): T60 principal diagnosis OR a pesticide
+    # external-cause code (X48/X68/X87/Y18) in the principal, secondary, or
+    # associated diagnosis fields.
+    pesticida = substr(DIAG_PRINC, 1, 3) == "T60" |
+                substr(DIAG_PRINC, 1, 3) %in% PEST_EXT_CODES |
+                substr(DIAG_SECUN, 1, 3) %in% PEST_EXT_CODES |
+                substr(CID_ASSO,   1, 3) %in% PEST_EXT_CODES
+  )
 
 cat("Filtered (IEXO + SP residence):", nrow(sih_out), "rows\n")
 cat("Period:", paste(sort(unique(sih_out$ANO_CMPT)), collapse = " "), "\n")
@@ -91,7 +106,13 @@ sinan_raw <- read_parquet("Bancos/pre-consolidados/SINAN/SINAN_10_IEXO_SP.parque
 cat("Raw:", nrow(sinan_raw), "rows\n")
 
 sinan_out <- sinan_raw |>
-  select(-any_of(SINAN_COLUMNS_DROP))
+  select(-any_of(SINAN_COLUMNS_DROP)) |>
+  mutate(
+    # Pesticide-specific flag (issue #7): primary toxic agent (AGENTE_TOX) in the
+    # pesticide group — 02 agricultural, 03 domestic, 04 public-health, 05
+    # rodenticide, 06 veterinary. Strict primary-agent match (no free-text recovery).
+    pesticida = AGENTE_TOX %in% c("02", "03", "04", "05", "06")
+  )
 
 cat("Columns kept:", ncol(sinan_out), "of", ncol(sinan_raw), "\n")
 cat("Period:", paste(sort(unique(sinan_out$ano_origem)), collapse = " "), "\n")

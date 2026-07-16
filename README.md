@@ -229,6 +229,33 @@ except CAGED monthly parquets (use `município` → derive `cod_ibge` via `subst
 
 ---
 
+## Interactive Dashboard
+
+A local [Shiny dashboard](dashboard/) explores the consolidated base and the
+individual-level files without leaving your machine (no server, no network at
+runtime — it reads only `resultados/`). It ships as two twin apps with identical
+logic: `dashboard/app.R` (Portuguese) and `dashboard/app_EN.R` (English).
+
+- **Overview** — indicator × year across the 645 municipalities: KPI cards,
+  choropleth map, time series, top-15 ranking, and a searchable table. Selecting
+  municipalities filters the whole page.
+- **Relationships** — pick two variables to see a **bivariate 3×3 choropleth**, a
+  scatter with a trend line, and Spearman/Pearson correlation. The map exports as
+  PNG for use as report figures.
+- **Microdata** — drill into SIH / SINAN / SIM / SISAGUA with lazy `arrow` filtering.
+
+Run it from the repo root (with `Agrotoxicos.Rproj` open):
+
+```r
+install.packages(c("shiny", "bslib", "plotly", "leaflet", "reactable", "sf",
+                   "arrow", "dplyr", "tidyr", "scales", "geobr", "ggplot2",
+                   "patchwork"))
+source("dashboard/setup_geo.R")   # one-time map cache (already committed)
+shiny::runApp("dashboard")        # Portuguese; for English open app_EN.R and Run App
+```
+
+See [`dashboard/README.md`](dashboard/README.md) for details.
+
 ## Brazilian Health Data Infrastructure — Context for International Analysts
 
 **DATASUS** is Brazil's national health informatics department. It maintains:

@@ -7,6 +7,34 @@ previous packaged version (dados_current-*.zip).
 
 
 ----------------------------------------------------------------
+Version: 2026-07-14
+----------------------------------------------------------------
+
+Focus: dashboard enhancements. No changes to the consolidated
+base or any data output — this release is dashboard-only.
+
+DASHBOARD
+  - English twin app: dashboard/app_EN.R (same logic as app.R,
+    fully translated UI, English number formatting).
+  - Overview tab: selecting municipalities now filters the whole
+    page (KPI cards, time series, map, ranking), not just the
+    table; unselected municipalities grey out on the map. The
+    ranking title now shows the selected year.
+  - New "Relacoes" / "Relationships" tab: pick two variables and
+    a year to see a bivariate 3x3 tercile choropleth (blue = high
+    Y, pink = high X, purple = both high), a scatter with a trend
+    line, and Spearman/Pearson correlation. The bivariate map is a
+    static ggplot and exports as PNG for the descriptive report.
+  - Indicator list expanded from 12 to 24 variables (pediatric
+    0-14 rates, in-hospital case fatality, IBP, IPVS, race/colour
+    shares).
+  - New package dependencies: ggplot2, patchwork.
+
+DATA
+  - Unchanged. Base remains at 73 variables, 7,095 rows.
+
+
+----------------------------------------------------------------
 Version: 2026-07-10
 ----------------------------------------------------------------
 
