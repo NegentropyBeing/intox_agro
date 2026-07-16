@@ -1021,17 +1021,22 @@ code). Use for municipality-level analysis</td>
 <tr class="even">
 <td><code>DIAG_PRINC</code></td>
 <td>string</td>
-<td>Primary diagnosis (ICD-10)</td>
+<td>Primary diagnosis (ICD-10, <strong>no dot, 4 chars</strong> — see
+Appendix A). Carries the <strong>T</strong> code (nature of the
+substance), e.g. <code>&quot;T600&quot;</code></td>
 </tr>
 <tr class="odd">
 <td><code>DIAG_SECUN</code></td>
 <td>string</td>
-<td>Secondary diagnosis (ICD-10)</td>
+<td>Secondary diagnosis (ICD-10, <strong>no dot, 4 chars</strong>).
+Where the <strong>X/Y external-cause</strong> code normally lives,
+e.g. <code>&quot;X689&quot;</code>. <code>&quot;0000&quot;</code> = not filled (69,976
+records)</td>
 </tr>
 <tr class="even">
 <td><code>CID_ASSO</code></td>
 <td>string</td>
-<td>Associated diagnosis (ICD-10)</td>
+<td>Associated diagnosis (ICD-10, <strong>no dot, 4 chars</strong>)</td>
 </tr>
 <tr class="odd">
 <td><code>CID_MORTE</code></td>
@@ -1077,11 +1082,24 @@ a pesticide external-cause code (X48/X68/X87/Y18) appears in
 </table>
 <blockquote>
 <p><strong>Pesticide-specific cases:</strong> use the
-<code>pesticida</code> flag. It generalises the older
-<code>substr(DIAG_PRINC, 1, 3) == &quot;T60&quot;</code> rule (still valid for
-T60-only) by also catching pesticide external-cause codes in the
-secondary/associated diagnosis fields. Use <code>MUNIC_RES</code>, not
-<code>MUNIC_MOV</code>, for patient’s municipality of residence.</p>
+<code>pesticida</code> flag (1,127 <code>TRUE</code>). It generalises
+the older <code>substr(DIAG_PRINC, 1, 3) == &quot;T60&quot;</code> rule (still
+valid for T60-only) by also catching pesticide external-cause codes in
+the secondary/associated diagnosis fields. Use <code>MUNIC_RES</code>,
+not <code>MUNIC_MOV</code>, for patient’s municipality of residence.</p>
+<p><strong>Where each code lives — expect (almost) no X/Y in
+<code>DIAG_PRINC</code>.</strong> SIH codes the <em>nature</em> of the
+poisoning in the principal diagnosis (T60 = pesticide, 754 records) and
+the <em>external cause / intent</em> in the secondary fields
+(X48/X68/X87/Y18: 379 in <code>DIAG_SECUN</code>, 14 in
+<code>CID_ASSO</code>, only <strong>9</strong> in
+<code>DIAG_PRINC</code>). Searching the principal diagnosis for X/Y
+codes and getting ~nothing is the <strong>expected</strong> result, not
+a data error. The two sets barely overlap, which is why the
+<code>pesticida</code> flag is <code>T60 OR X/Y-anywhere</code> = 1,127.
+Note this differs from SIM, which filters <code>CAUSABAS</code>
+(underlying cause) and therefore keys pesticide deaths on the
+<strong>X/Y</strong> codes, not T60 — see Section 4.</p>
 </blockquote>
 <hr />
 </div>
@@ -1249,7 +1267,8 @@ X60–X69, Y10–Y19 in underlying cause (<code>CAUSABAS</code>)</p>
 <tr class="even">
 <td><code>CAUSABAS</code></td>
 <td>string</td>
-<td>Underlying cause of death (ICD-10)</td>
+<td>Underlying cause of death (ICD-10, <strong>no dot, always 4
+chars</strong> — see Appendix A), e.g. <code>&quot;X689&quot;</code></td>
 </tr>
 <tr class="odd">
 <td><code>CAUSABAS_O</code></td>
@@ -1313,6 +1332,18 @@ code)</td>
 <p>Extract year from <code>DTOBITO</code> with
 <code>substr(DTOBITO, 1, 4)</code>. Use <code>CODMUNRES</code> for
 municipality of residence.</p>
+<p><strong>Pesticide deaths key on X/Y, not T60.</strong> SIM filters
+the <em>underlying</em> cause (<code>CAUSABAS</code>), which for a fatal
+poisoning is the external-cause code — so the pesticide subset here is
+<code>substr(CAUSABAS, 1, 3) %in% c(&quot;X48&quot;,&quot;X68&quot;,&quot;X87&quot;,&quot;Y18&quot;)</code> (698
+deaths), <strong>not</strong> T60. This is the mirror image of SIH,
+where the pesticide subset keys on T60 in the principal diagnosis (see
+Section 2). Aggregated in the consolidated base as
+<code>sim_n_obitos_pesticida</code>, with the four intent subtypes
+(<code>_acidental</code> X48, <code>_autoprovocado</code> X68,
+<code>_agressao</code> X87, <code>_indeterminado</code> Y18). All codes
+are 4 characters — an exact match on <code>&quot;X48&quot;</code> returns
+<strong>0</strong>.</p>
 </blockquote>
 <hr />
 </div>
@@ -2383,6 +2414,34 @@ municipalities</td>
 </div>
 <div id="appendix-a-icd-10-codes-used-for-intoxication-filtering" class="section level2">
 <h2>Appendix A — ICD-10 Codes Used for Intoxication Filtering</h2>
+<blockquote>
+<h3 id="code-format-datasus-stores-icd-10-codes-without-the-dot">⚠️ Code
+format: DATASUS stores ICD-10 codes <strong>without the
+dot</strong></h3>
+<p>Throughout this appendix codes are written in the conventional dotted
+notation (<code>T60.0</code>, <code>X48</code>) for readability.
+<strong>The data does not use it.</strong> DATASUS stores the code as a
+4-character string with no punctuation, the 4th character being the
+subcategory: <code>T60.0</code> → <code>&quot;T600&quot;</code>,
+<code>X48.9</code> → <code>&quot;X489&quot;</code>. Three-character strings such
+as <code>&quot;T60&quot;</code> do occur, but they are rare (340 of 76,527 SIH
+records) — they mean the subcategory was never coded,
+<strong>not</strong> “any T60”.</p>
+<p><strong>Consequence:</strong> an exact match returns zero or
+near-zero and looks like a bug.
+<code>CAUSABAS %in% c(&quot;X48&quot;,&quot;X68&quot;,&quot;X87&quot;,&quot;Y18&quot;)</code> matches <strong>0
+of 6,564</strong> SIM deaths, because every code there is 4 characters.
+Always match on the prefix:</p>
+<pre class="r"><code># wrong — silently returns (almost) nothing
+filter(d, DIAG_PRINC %in% c(&quot;X48&quot;, &quot;X68&quot;, &quot;X87&quot;, &quot;Y18&quot;))
+
+# right
+filter(d, substr(DIAG_PRINC, 1, 3) %in% c(&quot;X48&quot;, &quot;X68&quot;, &quot;X87&quot;, &quot;Y18&quot;))</code></pre>
+<p>For pesticide-specific cases you normally do not need to filter by
+code at all — use the pre-computed <code>pesticida</code> flag (SIH,
+SINAN) or the <code>*_pesticida</code> columns in the consolidated base.
+See Section 1.</p>
+</blockquote>
 <p>Applied consistently across SIH, SINAN, and SIM:</p>
 <table>
 <thead>
@@ -2412,40 +2471,50 @@ municipalities</td>
 </table>
 <div id="t60-subcategories-pesticide-specific" class="section level3">
 <h3>T60 subcategories (pesticide-specific)</h3>
+<p>Stored value = code without the dot (see the format warning
+above).</p>
 <table>
 <thead>
 <tr class="header">
 <th>Code</th>
+<th>Stored as</th>
 <th>Description</th>
 </tr>
 </thead>
 <tbody>
 <tr class="odd">
 <td>T60.0</td>
+<td><code>T600</code></td>
 <td>Organophosphate and carbamate insecticides</td>
 </tr>
 <tr class="even">
 <td>T60.1</td>
+<td><code>T601</code></td>
 <td>Halogenated insecticides</td>
 </tr>
 <tr class="odd">
 <td>T60.2</td>
+<td><code>T602</code></td>
 <td>Other insecticides</td>
 </tr>
 <tr class="even">
 <td>T60.3</td>
+<td><code>T603</code></td>
 <td>Herbicides and fungicides</td>
 </tr>
 <tr class="odd">
 <td>T60.4</td>
+<td><code>T604</code></td>
 <td>Rodenticides</td>
 </tr>
 <tr class="even">
 <td>T60.8</td>
+<td><code>T608</code></td>
 <td>Other pesticides</td>
 </tr>
 <tr class="odd">
 <td>T60.9</td>
+<td><code>T609</code></td>
 <td>Pesticide, unspecified</td>
 </tr>
 </tbody>

@@ -174,9 +174,9 @@ All sources below are joined here. Variable groups can be included or excluded v
 | `IDADE` | string | Patient age (in units given by `COD_IDADE`) |
 | `SEXO` | string | Sex: `1`=male, `3`=female, `0`=NA |
 | `RACA_COR` | string | Race/ethnicity (coded) |
-| `DIAG_PRINC` | string | Primary diagnosis (ICD-10) |
-| `DIAG_SECUN` | string | Secondary diagnosis (ICD-10) |
-| `CID_ASSO` | string | Associated diagnosis (ICD-10) |
+| `DIAG_PRINC` | string | Primary diagnosis (ICD-10, **no dot, 4 chars** — see Appendix A). Carries the **T** code (nature of the substance), e.g. `"T600"` |
+| `DIAG_SECUN` | string | Secondary diagnosis (ICD-10, **no dot, 4 chars**). Where the **X/Y external-cause** code normally lives, e.g. `"X689"`. `"0000"` = not filled (69,976 records) |
+| `CID_ASSO` | string | Associated diagnosis (ICD-10, **no dot, 4 chars**) |
 | `CID_MORTE` | string | ICD-10 code of death cause (when applicable) |
 | `MORTE` | string | In-hospital death: `"Sim"` = yes, `"Não"` = no |
 | `DIAS_PERM` | string | Length of stay (days) |
@@ -185,10 +185,19 @@ All sources below are joined here. Variable groups can be included or excluded v
 | `VAL_TOT` | string | Total reimbursement value (BRL) |
 | `pesticida` | logical | **Pesticide-specific flag (issue #7):** `TRUE` if `DIAG_PRINC` is T60 **or** a pesticide external-cause code (X48/X68/X87/Y18) appears in `DIAG_PRINC`, `DIAG_SECUN`, or `CID_ASSO` |
 
-> **Pesticide-specific cases:** use the `pesticida` flag. It generalises the older
-> `substr(DIAG_PRINC, 1, 3) == "T60"` rule (still valid for T60-only) by also catching
+> **Pesticide-specific cases:** use the `pesticida` flag (1,127 `TRUE`). It generalises the
+> older `substr(DIAG_PRINC, 1, 3) == "T60"` rule (still valid for T60-only) by also catching
 > pesticide external-cause codes in the secondary/associated diagnosis fields.
 > Use `MUNIC_RES`, not `MUNIC_MOV`, for patient's municipality of residence.
+>
+> **Where each code lives — expect (almost) no X/Y in `DIAG_PRINC`.** SIH codes the
+> *nature* of the poisoning in the principal diagnosis (T60 = pesticide, 754 records) and the
+> *external cause / intent* in the secondary fields (X48/X68/X87/Y18: 379 in `DIAG_SECUN`,
+> 14 in `CID_ASSO`, only **9** in `DIAG_PRINC`). Searching the principal diagnosis for X/Y
+> codes and getting ~nothing is the **expected** result, not a data error. The two sets
+> barely overlap, which is why the `pesticida` flag is `T60 OR X/Y-anywhere` = 1,127.
+> Note this differs from SIM, which filters `CAUSABAS` (underlying cause) and therefore keys
+> pesticide deaths on the **X/Y** codes, not T60 — see Section 4.
 
 ---
 
@@ -239,7 +248,7 @@ Key analytical variables:
 | Variable | Type | Description |
 |---|---|---|
 | `DTOBITO` | string | Date of death (format `"YYYY-MM-DD"`) |
-| `CAUSABAS` | string | Underlying cause of death (ICD-10) |
+| `CAUSABAS` | string | Underlying cause of death (ICD-10, **no dot, always 4 chars** — see Appendix A), e.g. `"X689"` |
 | `CAUSABAS_O` | string | Original underlying cause as recorded |
 | `CODMUNRES` | string | **Municipality of patient's residence** (6-digit IBGE code) |
 | `CODMUNOCOR` | string | Municipality of occurrence of death |
@@ -253,6 +262,14 @@ Key analytical variables:
 | `ASSISTMED` | string | Medical assistance received |
 
 > Extract year from `DTOBITO` with `substr(DTOBITO, 1, 4)`. Use `CODMUNRES` for municipality of residence.
+>
+> **Pesticide deaths key on X/Y, not T60.** SIM filters the *underlying* cause (`CAUSABAS`),
+> which for a fatal poisoning is the external-cause code — so the pesticide subset here is
+> `substr(CAUSABAS, 1, 3) %in% c("X48","X68","X87","Y18")` (698 deaths), **not** T60. This is
+> the mirror image of SIH, where the pesticide subset keys on T60 in the principal diagnosis
+> (see Section 2). Aggregated in the consolidated base as `sim_n_obitos_pesticida`, with the
+> four intent subtypes (`_acidental` X48, `_autoprovocado` X68, `_agressao` X87,
+> `_indeterminado` Y18). All codes are 4 characters — an exact match on `"X48"` returns **0**.
 
 ---
 
@@ -587,6 +604,31 @@ Key variables: `cod_ibge`, `ivs`, `ivs_infraestrutura_urbana`, `ivs_capital_huma
 
 ## Appendix A — ICD-10 Codes Used for Intoxication Filtering
 
+> ### ⚠️ Code format: DATASUS stores ICD-10 codes **without the dot**
+>
+> Throughout this appendix codes are written in the conventional dotted notation
+> (`T60.0`, `X48`) for readability. **The data does not use it.** DATASUS stores the
+> code as a 4-character string with no punctuation, the 4th character being the
+> subcategory: `T60.0` → `"T600"`, `X48.9` → `"X489"`. Three-character strings such as
+> `"T60"` do occur, but they are rare (340 of 76,527 SIH records) — they mean the
+> subcategory was never coded, **not** "any T60".
+>
+> **Consequence:** an exact match returns zero or near-zero and looks like a bug.
+> `CAUSABAS %in% c("X48","X68","X87","Y18")` matches **0 of 6,564** SIM deaths, because
+> every code there is 4 characters. Always match on the prefix:
+>
+> ```r
+> # wrong — silently returns (almost) nothing
+> filter(d, DIAG_PRINC %in% c("X48", "X68", "X87", "Y18"))
+>
+> # right
+> filter(d, substr(DIAG_PRINC, 1, 3) %in% c("X48", "X68", "X87", "Y18"))
+> ```
+>
+> For pesticide-specific cases you normally do not need to filter by code at all —
+> use the pre-computed `pesticida` flag (SIH, SINAN) or the `*_pesticida` columns in
+> the consolidated base. See Section 1.
+
 Applied consistently across SIH, SINAN, and SIM:
 
 | Range | Category |
@@ -598,15 +640,17 @@ Applied consistently across SIH, SINAN, and SIM:
 
 ### T60 subcategories (pesticide-specific)
 
-| Code | Description |
-|---|---|
-| T60.0 | Organophosphate and carbamate insecticides |
-| T60.1 | Halogenated insecticides |
-| T60.2 | Other insecticides |
-| T60.3 | Herbicides and fungicides |
-| T60.4 | Rodenticides |
-| T60.8 | Other pesticides |
-| T60.9 | Pesticide, unspecified |
+Stored value = code without the dot (see the format warning above).
+
+| Code | Stored as | Description |
+|---|---|---|
+| T60.0 | `T600` | Organophosphate and carbamate insecticides |
+| T60.1 | `T601` | Halogenated insecticides |
+| T60.2 | `T602` | Other insecticides |
+| T60.3 | `T603` | Herbicides and fungicides |
+| T60.4 | `T604` | Rodenticides |
+| T60.8 | `T608` | Other pesticides |
+| T60.9 | `T609` | Pesticide, unspecified |
 
 ---
 
