@@ -170,8 +170,8 @@ All sources below are joined here. Variable groups can be included or excluded v
 | `MUNIC_MOV` | string | Municipality of the hospital |
 | `CNES` | string | Healthcare facility code (7 digits) |
 | `NASC` | string | Patient date of birth |
-| `COD_IDADE` | string | Age unit: `1`=hours, `2`=days, `3`=months, `4`=years |
-| `IDADE` | string | Patient age (in units given by `COD_IDADE`) |
+| `COD_IDADE` | string | Age unit, stored **decoded** (not as the raw DATASUS digit): `"Anos"` (75,654), `"Meses"` (800), `"Dias"` (67), `"Centena de anos (100 + idade)"` (6). There is no `"Horas"` value in this file |
+| `IDADE` | string | Patient age in the units given by `COD_IDADE`. **Stored as a string, not zero-padded** (`"0"`, `"1"`, … `"9"`, `"10"`, …) — see the age-filtering warning below |
 | `SEXO` | string | Sex: `1`=male, `3`=female, `0`=NA |
 | `RACA_COR` | string | Race/ethnicity (coded) |
 | `DIAG_PRINC` | string | Primary diagnosis (ICD-10, **no dot, 4 chars** — see Appendix A). Carries the **T** code (nature of the substance), e.g. `"T600"` |
@@ -185,10 +185,34 @@ All sources below are joined here. Variable groups can be included or excluded v
 | `VAL_TOT` | string | Total reimbursement value (BRL) |
 | `pesticida` | logical | **Pesticide-specific flag (issue #7):** `TRUE` if `DIAG_PRINC` is T60 **or** a pesticide external-cause code (X48/X68/X87/Y18) appears in `DIAG_PRINC`, `DIAG_SECUN`, or `CID_ASSO` |
 
-> **Pesticide-specific cases:** use the `pesticida` flag (1,127 `TRUE`). It generalises the
-> older `substr(DIAG_PRINC, 1, 3) == "T60"` rule (still valid for T60-only) by also catching
+> **⚠️ Filtering by age — `IDADE` is a string.** Comparing it directly against a number
+> (`IDADE <= 14`) triggers a **lexicographic** comparison, which silently drops ages 2–9
+> (`"5" <= "14"` is `FALSE`, because `"5"` sorts after `"1"`). It throws no error and returns
+> a plausible-looking subset. Always coerce first:
+>
+> ```r
+> # WRONG — silently drops ages 2-9
+> filter(COD_IDADE == "Anos" & IDADE <= 14)
+> # RIGHT
+> filter(COD_IDADE %in% c("Dias", "Meses") | (COD_IDADE == "Anos" & as.integer(IDADE) <= 14))
+> ```
+>
+> Include `"Dias"`/`"Meses"` to keep infants; exclude `"Centena de anos (100 + idade)"`.
+> On the T60 subset this is the difference between **69** and **32** paediatric records.
+>
+> **Pesticide-specific cases:** use the `pesticida` flag (1,127 `TRUE`) for **non-temporal**
+> analysis. It generalises the older `substr(DIAG_PRINC, 1, 3) == "T60"` rule by also catching
 > pesticide external-cause codes in the secondary/associated diagnosis fields.
 > Use `MUNIC_RES`, not `MUNIC_MOV`, for patient's municipality of residence.
+>
+> **⚠️ Do not use the `pesticida` flag for trends over time — use `DIAG_PRINC` T60 instead.**
+> `DIAG_SECUN` and `CID_ASSO` are filled in **2014 only** (99.6% of 2014 records; **0%** in
+> 2015–2024 — verified against the raw pre-consolidated file and against a fresh DATASUS
+> download, so this is a source-side discontinuation, not a pipeline bug). The flag's extra
+> reach therefore exists only in 2014, making it **time-inconsistent**: it yields 391 records in
+> 2014 vs 68 in 2015, and from 2016 on it is identical to T60-only. That ~6x drop is a pure
+> artefact. For any analysis over time — including trends in case characteristics — use
+> `substr(DIAG_PRINC, 1, 3) == "T60"`, the only definition that is consistent across 2014–2024.
 >
 > **Where each code lives — expect (almost) no X/Y in `DIAG_PRINC`.** SIH codes the
 > *nature* of the poisoning in the principal diagnosis (T60 = pesticide, 754 records) and the

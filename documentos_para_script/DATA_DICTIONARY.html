@@ -999,13 +999,18 @@ code). Use for municipality-level analysis</td>
 <tr class="even">
 <td><code>COD_IDADE</code></td>
 <td>string</td>
-<td>Age unit: <code>1</code>=hours, <code>2</code>=days,
-<code>3</code>=months, <code>4</code>=years</td>
+<td>Age unit, stored <strong>decoded</strong> (not as the raw DATASUS
+digit): <code>&quot;Anos&quot;</code> (75,654), <code>&quot;Meses&quot;</code> (800),
+<code>&quot;Dias&quot;</code> (67), <code>&quot;Centena de anos (100 + idade)&quot;</code>
+(6). There is no <code>&quot;Horas&quot;</code> value in this file</td>
 </tr>
 <tr class="odd">
 <td><code>IDADE</code></td>
 <td>string</td>
-<td>Patient age (in units given by <code>COD_IDADE</code>)</td>
+<td>Patient age in the units given by <code>COD_IDADE</code>.
+<strong>Stored as a string, not zero-padded</strong> (<code>&quot;0&quot;</code>,
+<code>&quot;1&quot;</code>, … <code>&quot;9&quot;</code>, <code>&quot;10&quot;</code>, …) — see the
+age-filtering warning below</td>
 </tr>
 <tr class="even">
 <td><code>SEXO</code></td>
@@ -1081,12 +1086,41 @@ a pesticide external-cause code (X48/X68/X87/Y18) appears in
 </tbody>
 </table>
 <blockquote>
+<p><strong>⚠️ Filtering by age — <code>IDADE</code> is a
+string.</strong> Comparing it directly against a number
+(<code>IDADE &lt;= 14</code>) triggers a <strong>lexicographic</strong>
+comparison, which silently drops ages 2–9 (<code>&quot;5&quot; &lt;= &quot;14&quot;</code>
+is <code>FALSE</code>, because <code>&quot;5&quot;</code> sorts after
+<code>&quot;1&quot;</code>). It throws no error and returns a plausible-looking
+subset. Always coerce first:</p>
+<pre class="r"><code># WRONG — silently drops ages 2-9
+filter(COD_IDADE == &quot;Anos&quot; &amp; IDADE &lt;= 14)
+# RIGHT
+filter(COD_IDADE %in% c(&quot;Dias&quot;, &quot;Meses&quot;) | (COD_IDADE == &quot;Anos&quot; &amp; as.integer(IDADE) &lt;= 14))</code></pre>
+<p>Include <code>&quot;Dias&quot;</code>/<code>&quot;Meses&quot;</code> to keep infants;
+exclude <code>&quot;Centena de anos (100 + idade)&quot;</code>. On the T60 subset
+this is the difference between <strong>69</strong> and
+<strong>32</strong> paediatric records.</p>
 <p><strong>Pesticide-specific cases:</strong> use the
-<code>pesticida</code> flag (1,127 <code>TRUE</code>). It generalises
-the older <code>substr(DIAG_PRINC, 1, 3) == &quot;T60&quot;</code> rule (still
-valid for T60-only) by also catching pesticide external-cause codes in
-the secondary/associated diagnosis fields. Use <code>MUNIC_RES</code>,
-not <code>MUNIC_MOV</code>, for patient’s municipality of residence.</p>
+<code>pesticida</code> flag (1,127 <code>TRUE</code>) for
+<strong>non-temporal</strong> analysis. It generalises the older
+<code>substr(DIAG_PRINC, 1, 3) == &quot;T60&quot;</code> rule by also catching
+pesticide external-cause codes in the secondary/associated diagnosis
+fields. Use <code>MUNIC_RES</code>, not <code>MUNIC_MOV</code>, for
+patient’s municipality of residence.</p>
+<p><strong>⚠️ Do not use the <code>pesticida</code> flag for trends over
+time — use <code>DIAG_PRINC</code> T60 instead.</strong>
+<code>DIAG_SECUN</code> and <code>CID_ASSO</code> are filled in
+<strong>2014 only</strong> (99.6% of 2014 records; <strong>0%</strong>
+in 2015–2024 — verified against the raw pre-consolidated file and
+against a fresh DATASUS download, so this is a source-side
+discontinuation, not a pipeline bug). The flag’s extra reach therefore
+exists only in 2014, making it <strong>time-inconsistent</strong>: it
+yields 391 records in 2014 vs 68 in 2015, and from 2016 on it is
+identical to T60-only. That ~6x drop is a pure artefact. For any
+analysis over time — including trends in case characteristics — use
+<code>substr(DIAG_PRINC, 1, 3) == &quot;T60&quot;</code>, the only definition that
+is consistent across 2014–2024.</p>
 <p><strong>Where each code lives — expect (almost) no X/Y in
 <code>DIAG_PRINC</code>.</strong> SIH codes the <em>nature</em> of the
 poisoning in the principal diagnosis (T60 = pesticide, 754 records) and
