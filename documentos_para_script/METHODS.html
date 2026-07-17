@@ -374,9 +374,9 @@ the SIH (see Section 3).</p>
 <p>The municipality identifier throughout all outputs is a
 <strong>6-digit IBGE code</strong> (<code>cod_ibge</code>), consistent
 across all sources. Municipality names (<code>nome_municipio</code>) in
-the consolidated base are sourced from the <code>geobr</code> R package
-(<code>read_municipality(code_muni = &quot;SP&quot;, year = 2024)</code>), which
-provides the complete list of 645 SP municipalities with canonical IBGE
+the consolidated base are read from
+<code>Bancos/pop_raca_cor_2022.xlsx</code> (IBGE SIDRA table 9606, 2022
+Census), which lists all 645 SP municipalities with canonical IBGE
 names. This ensures all municipalities have a name regardless of whether
 they appear in agricultural data sources such as PAM.</p>
 <hr />
@@ -680,25 +680,13 @@ included; they live under a different <code>nivel</code> value
 (<code>regiao,uf,rm,municipio,udh</code>) that is excluded by the
 municipal-level filter.</p>
 <p>The overall municipal value is the <strong>Total Cor × Total Sexo ×
-Total Situação de Domicílio</strong> cell. Because
-<code>label_cor</code> and <code>label_sexo</code> were not carried into
-the output parquet, that cell is recovered indirectly in
-<code>08_build_consolidated_base.R</code>: filter
-<code>label_sit_dom == &quot;Total Situação de Domicílio&quot;</code>, then take
-the <strong>maximum-population</strong> row per municipality. The
-all-race/all-sex total has, by construction, a larger population than
-any subgroup, so the maximum reliably lands on the totals cell. This was
-verified to select the “Total Cor / Total Sexo” row for all 645
-municipalities, with no exceptions.</p>
-<blockquote>
-<p><strong>Reproducibility note:</strong> retaining
-<code>label_cor</code> and <code>label_sexo</code> in the output would
-let downstream code select the totals cell explicitly
-(<code>label_cor == &quot;Total Cor&quot; &amp; label_sexo == &quot;Total Sexo&quot;</code>)
-rather than via the population heuristic. The two approaches give
-identical results today; the explicit filter is recommended if the
-pipeline is re-run.</p>
-</blockquote>
+Total Situação de Domicílio</strong> cell.
+<code>07_build_outputs.R</code> retains <code>label_cor</code> and
+<code>label_sexo</code> in the output parquet, and
+<code>08_build_consolidated_base.R</code> selects that cell explicitly:
+<code>label_sit_dom == &quot;Total Situação de Domicílio&quot; &amp; label_cor == &quot;Total Cor&quot; &amp; label_sexo == &quot;Total Sexo&quot;</code>,
+with an <code>anyDuplicated()</code> guard on <code>cod_ibge</code>.
+This selects one row for each of the 645 municipalities.</p>
 </div>
 <div id="known-limitations" class="section level3">
 <h3>Known limitations</h3>

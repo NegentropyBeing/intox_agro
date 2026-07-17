@@ -406,7 +406,7 @@ script.</p>
 <tr class="even">
 <td><code>nome_municipio</code></td>
 <td>string</td>
-<td>geobr</td>
+<td>SIDRA T9606</td>
 <td>Municipality name (IBGE canonical,
 e.g. <code>&quot;Campinas&quot;</code>)</td>
 </tr>
@@ -2271,15 +2271,11 @@ lowercase column names.</p>
 breakdowns by race (<code>label_cor</code>: Branco / Negro / Total Cor)
 × sex (<code>label_sexo</code>: Homem / Mulher / Total Sexo), each
 further split by household situation (<code>label_sit_dom</code>).
-<strong>Note:</strong> <code>label_cor</code> and
-<code>label_sexo</code> were not retained in this output file. To obtain
-the overall municipal value, filter
-<code>label_sit_dom == &quot;Total Situação de Domicílio&quot;</code> and take the
-<strong>maximum-population</strong> row per municipality — this is the
-“Total Cor × Total Sexo” cell, whose population is by construction
-larger than any subgroup (verified for all 645 municipalities).
-Weighting areas (UDH) are <em>not</em> present here; they were excluded
-at the <code>nivel</code> filter in <code>07_build_outputs.R</code>.
+<strong>Note:</strong> to obtain the overall municipal value, filter
+<code>label_sit_dom == &quot;Total Situação de Domicílio&quot; &amp; label_cor == &quot;Total Cor&quot; &amp; label_sexo == &quot;Total Sexo&quot;</code>
+— this selects one row per municipality (645/645). Weighting areas (UDH)
+are <em>not</em> present here; they were excluded at the
+<code>nivel</code> filter in <code>07_build_outputs.R</code>.
 <strong>Period:</strong> Census 2010 <strong>Source:</strong> IPEA /
 Atlas do Desenvolvimento Humano</p>
 <p>Key variables: <code>cod_ibge</code>, <code>ivs</code>,

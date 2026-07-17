@@ -121,8 +121,7 @@ install.packages(c(
   "purrr",
   "foreign",      # .dbf files (population estimates)
   "archive",      # .7z extraction (CAGED)
-  "data.table",   # fast CAGED reading
-  "geobr"         # canonical municipality names (08_build_consolidated_base.R)
+  "data.table"    # fast CAGED reading
 ))
 
 # microdatasus must be installed from GitHub:
