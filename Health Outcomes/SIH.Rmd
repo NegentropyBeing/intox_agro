@@ -21,6 +21,8 @@ library(purrr)
 library(knitr)
 library(kableExtra)
 library(stringr)
+library(gt)
+library(scales)
 ```
 
 ## Using Consolidated for Analyses
@@ -41,7 +43,8 @@ poisoning <- consolidada |>
          taxa_notif_0_14_100k,
          taxa_obitos_sim_0_14_100k,
          taxa_letalidade_hosp_0_14,
-         sih_n_obitos_hosp_0_14)
+         sih_n_obitos_hosp_0_14,
+         pop_total)
 ```
 
 # Hospitalization per 100K
@@ -151,6 +154,25 @@ ggplot(hosp_summary, aes(x = ano, y = total_hosp, group = 1)) +
     x = "Year",
     y = "Hospitalizations (n)",
     title = "Hospitalizations among children aged 0–14 years"
+  ) +
+  theme_minimal(base_size = 14)
+
+#rate
+hosp_rate_summary <- consolidada %>%
+  group_by(ano) %>%
+  summarise(
+    hosp_rate = sum(taxa_hosp_0_14_100k, na.rm = TRUE),
+    .groups = "drop"
+  )
+
+ggplot(hosp_rate_summary, aes(x = ano, y = hosp_rate, group = 1)) +
+  geom_line(linewidth = 1.2, color = "steelblue") +
+  geom_point(size = 3, color = "steelblue") +
+  scale_x_continuous(breaks = unique(hosp_rate_summary$ano)) +
+  labs(
+    x = "Year",
+    y = "Hospitalizations per 100K",
+    title = "Hospitalization Rate Among children aged 0–14 years"
   ) +
   theme_minimal(base_size = 14)
 
@@ -394,36 +416,299 @@ SIH <- read_parquet("~/GitHub/intox_agro/resultados/SIH/sih_iexo_sp_2014_2024.pa
 
 ```{r}
 #clean
-
 SIH_0_14 <- SIH |>
+  filter(substr(DIAG_PRINC, 1, 3) == "T60") |>
   filter(
-    COD_IDADE in ("Dias", "Meses") OR (COD_IDADE == "Anos" AND IDADE <= 14))
+    COD_IDADE %in% c("Dias", "Meses") |
+      (COD_IDADE == "Anos" & as.integer(IDADE) <= 14))
 
+```
+
+## Missingness
+
+```{r}
+plot_missing(SIH_0_14)
+
+sum(is.na(SIH_0_14$RACA_COR))
+
+SIH_0_14 %>%
+  filter(is.na(RACA_COR)) %>%
+  distinct(MUNIC_RES)
+
+```
+
+## Types of Intoxication
+
+```{r}
+#table
+diag_table <- SIH_0_14 %>%
+  count(DIAG_PRINC, name = "Frequency") %>%
+  mutate(
+    Percent = Frequency / sum(Frequency)) %>%
+  arrange(desc(Frequency))
+
+diag_table %>%
+  gt() %>%
+  fmt_percent(
+    columns = Percent,
+    decimals = 1) %>%
+  cols_label(
+    DIAG_PRINC = "Principal Diagnosis (ICD-10 Code)",
+    Frequency = "n",
+    Percent = "%") %>%
+  tab_header(
+    title = md("**Distribution of Principal Diagnoses Among Hospitalizations of Children Aged 0–14 Years**")) %>%
+  fmt_number(
+    columns = Frequency,
+    decimals = 0,
+    use_seps = TRUE)
+
+#plot
+ggplot(SIH_0_14, aes(x = DIAG_PRINC)) +
+  geom_bar(fill = "lightskyblue4", color = "black") +
+  theme_classic() +
+  xlab("Principal Diagnosis") +
+  ylab("Count")
+
+```
+
+#### By Year
+
+```{r}
+diag_plot <- SIH_0_14 %>%
+  count(ANO_CMPT, DIAG_PRINC, name = "Frequency") %>%
+  group_by(ANO_CMPT) %>%
+  slice_max(Frequency, n = 10, with_ties = FALSE) %>%
+  ungroup()
+
+ggplot(diag_plot,
+       aes(x = reorder(DIAG_PRINC, Frequency),
+           y = Frequency,
+           fill = DIAG_PRINC)) +
+  geom_col() +
+  coord_flip() +
+  facet_wrap(~ANO_CMPT, scales = "free_y") +
+  theme_classic() +
+  guides(fill = "none")
+```
+
+#### By Age Group
+
+```{r}
+#Create var
 SIH_0_14 <- SIH_0_14 %>%
-  filter(
-    str_sub(DIAG_PRINC, 1, 3) %in% c("X48", "X68", "X87", "Y18") |
-      str_sub(DIAG_SECUN, 1, 3) %in% c("X48", "X68", "X87", "Y18")
-  )
-
+  mutate(
+    IDADE = as.numeric(IDADE),
+    age_group = case_when(
+      COD_IDADE %in% c("Dias", "Meses") ~ "0–3 years",
+      COD_IDADE == "Anos" & IDADE >= 0 & IDADE <= 3 ~ "0–3 years",
+      COD_IDADE == "Anos" & IDADE >= 4 & IDADE <= 7 ~ "4–7 years",
+      COD_IDADE == "Anos" & IDADE >= 8 & IDADE <= 10 ~ "8–10 years",
+      COD_IDADE == "Anos" & IDADE >= 11 & IDADE <= 14 ~ "11–14 years",
+      TRUE ~ NA_character_),
+    age_group = factor(
+      age_group,
+      levels = c("0–3 years", "4–7 years", "8–10 years", "11–14 years")))
 ```
 
-### Types of Intoxication
-
 ```{r}
+#plot
+diag_age <- SIH_0_14 %>%
+  count(age_group, DIAG_PRINC)
 
-table(SIH_0_14$DIAG_PRINC)
+ggplot(diag_age,
+       aes(x = age_group, y = n, fill = DIAG_PRINC)) +
+  geom_col(position = "fill") +
+  scale_y_continuous(labels = scales::percent) +
+  theme_classic() +
+  labs(
+    x = "Age group",
+    y = "Percent of hospitalizations",
+    fill = "Principal diagnosis")
 ```
 
-### Age Groups
+#### By Sex
 
 ```{r}
+#plot
+diag_sex <- SIH_0_14 %>%
+  count(SEXO, DIAG_PRINC)
 
+ggplot(diag_sex,
+       aes(x = SEXO, y = n, fill = DIAG_PRINC)) +
+  geom_col(position = "fill") +
+  scale_y_continuous(labels = scales::percent) +
+  theme_classic() +
+  labs(
+    x = "Sex",
+    y = "Percent of hospitalizations",
+    fill = "Principal diagnosis")
+```
+
+#### By Race
+
+```{r}
+#Recode
+SIH_0_14 <- SIH_0_14 %>%
+  mutate(
+    RACA_COR = case_when(
+      RACA_COR == "01" ~ "Branca (White)",
+      RACA_COR == "02" ~ "Preta (Black)",
+      RACA_COR == "03" ~ "Parda (Brown/Mixed)",
+      RACA_COR == "04" ~ "Amarela (Asian)",
+      RACA_COR == "05" ~ "Indígena (Indigenous)",
+      RACA_COR == "99" ~ "Unknown",
+      TRUE ~ NA_character_))
+```
+
+```{r}
+#Stacked
+diag_age <- SIH_0_14 %>%
+  count(RACA_COR, DIAG_PRINC)
+
+ggplot(diag_age,
+       aes(x = RACA_COR, y = n, fill = DIAG_PRINC)) +
+  geom_col(position = "fill") +
+  scale_y_continuous(labels = scales::percent) +
+  theme_classic() +
+  labs(
+    x = "Race",
+    y = "Percent of hospitalizations",
+    fill = "Principal diagnosis")
+```
+
+## Age Groups
+
+```{r}
+#Table
+age_table <- SIH_0_14 %>%
+  count(age_group, name = "Frequency") %>%
+  mutate(
+    Percent = Frequency / sum(Frequency)) %>%
+  arrange(desc(Frequency))
+
+age_table %>%
+  gt() %>%
+  fmt_percent(
+    columns = Percent,
+    decimals = 1) %>%
+  cols_label(
+    age_group = "Age Group",
+    Frequency = "n",
+    Percent = "%") %>%
+  tab_header(
+    title = md("**Distribution of Ages Amongst Hospitalizations**")) %>%
+  fmt_number(
+    columns = Frequency,
+    decimals = 0,
+    use_seps = TRUE)
+
+#Aggregate Plot
+ggplot(SIH_0_14, aes(x = age_group, fill = age_group)) +
+  geom_bar(aes(y = after_stat(count / sum(count)))) +
+  geom_text(
+    stat = "count",
+    aes(
+      y = after_stat(count / sum(count)),
+      label = scales::percent(after_stat(count / sum(count)), accuracy = 0.1)
+    ),
+    vjust = -0.3) +
+  scale_y_continuous(labels = scales::percent) +
+  theme_classic() +
+  labs(
+    x = "Age Group",
+    y = "Percentage of Hospitalizations",
+    fill = "Age Group")
+
+#Trend Plot
+ggplot(SIH_0_14,
+       aes(x = ANO_CMPT, fill = age_group)) +
+  geom_bar(position = "fill") +
+  scale_y_continuous(labels = scales::percent) +
+  theme_classic() +
+  labs(
+    x = "Year",
+    y = "Percentage of Hospitalizations",
+    fill = "Age Group")
 ```
 
 ### Race
 
 ```{r}
-
+#Aggregate lot
+ggplot(SIH_0_14, aes(x = RACA_COR, fill = RACA_COR)) +
+  geom_bar(aes(y = after_stat(count / sum(count)))) +
+  geom_text(
+    stat = "count",
+    aes(
+      y = after_stat(count / sum(count)),
+      label = scales::percent(after_stat(count / sum(count)), accuracy = 0.1)),
+    hjust = -0.2) +
+  coord_flip() +
+  scale_y_continuous(
+    labels = scales::percent,
+    expand = expansion(mult = c(0, 0.1))) +
+  theme_classic() +
+  labs(
+    x = "Race",
+    y = "Percentage of Hospitalizations",
+    fill = "Race") +
+  theme(
+    legend.position = "none")
 ```
 
-### Temporal Trends
+### Sex
+
+```{r}
+#Table
+sex_table <- SIH_0_14 %>%
+  count(SEXO, name = "Frequency") %>%
+  mutate(
+    Percent = Frequency / sum(Frequency)) %>%
+  arrange(desc(Frequency))
+
+sex_table %>%
+  gt() %>%
+  fmt_percent(
+    columns = Percent,
+    decimals = 1) %>%
+  cols_label(
+    SEXO = "Sex",
+    Frequency = "n",
+    Percent = "%") %>%
+  tab_header(
+    title = md("**Distribution of Hospitalizations by Sex**")) %>%
+  fmt_number(
+    columns = Frequency,
+    decimals = 0,
+    use_seps = TRUE)
+
+#Aggregate Plot
+ggplot(SIH_0_14, aes(x = SEXO, fill = SEXO)) +
+  geom_bar(aes(y = after_stat(count / sum(count)))) +
+  geom_text(
+    stat = "count",
+    aes(
+      y = after_stat(count / sum(count)),
+      label = scales::percent(after_stat(count / sum(count)), accuracy = 0.1)
+    ),
+    vjust = -0.3) +
+  scale_y_continuous(labels = scales::percent) +
+  theme_classic() +
+  labs(
+    x = "Sex",
+    y = "Percentage of Hospitalizations",
+    fill = "Sex")
+
+#Trend Plot
+#Trend Plot
+ggplot(SIH_0_14,
+       aes(x = ANO_CMPT, fill = SEXO)) +
+  geom_bar(position = "fill") +
+  scale_y_continuous(labels = scales::percent) +
+  theme_classic() +
+  labs(
+    x = "Year",
+    y = "Percentage of Hospitalizations",
+    fill = "Sex")
+```
