@@ -18,3 +18,4 @@ __MACOSX/
 # Claude Code local settings
 .claude/settings.local.json
 config.R
+quick_install_libraries.R
