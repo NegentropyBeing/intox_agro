@@ -19,10 +19,10 @@ municipality where care was received. This distinction matters for the SIH (see 
 
 The municipality identifier throughout all outputs is a **6-digit IBGE code** (`cod_ibge`),
 consistent across all sources. Municipality names (`nome_municipio`) in the consolidated
-base are sourced from the `geobr` R package (`read_municipality(code_muni = "SP", year = 2024)`),
-which provides the complete list of 645 SP municipalities with canonical IBGE names. This
-ensures all municipalities have a name regardless of whether they appear in agricultural
-data sources such as PAM.
+base are read from `Bancos/pop_raca_cor_2022.xlsx` (IBGE SIDRA table 9606, 2022 Census),
+which lists all 645 SP municipalities with canonical IBGE names. This ensures all
+municipalities have a name regardless of whether they appear in agricultural data sources
+such as PAM.
 
 ---
 
@@ -100,6 +100,37 @@ poisoning admissions carry a T-code there, all such admissions were already capt
 external-cause codes live in the secondary/associated fields that were retained. T60 subtypes
 are aggregated separately in the base (`sih_n_hosp_t60_0` … `_t60_9`) so agents can be analysed
 individually. The broad `sih_n_hosp` (all exogenous intoxication) is kept unchanged alongside.
+
+#### Limitation: `DIAG_SECUN` / `CID_ASSO` are populated in 2014 only
+
+The secondary (`DIAG_SECUN`) and associated (`CID_ASSO`) diagnosis fields are filled for 99.6%
+of 2014 admissions and for **0%** of 2015–2024 admissions. This was verified at three levels:
+in the analytic file, in the raw pre-consolidated SIH file (27.6M rows, already empty there),
+and via a fresh `fetch_datasus` download of one month of SIH-RD SP 2019 (`DIAG_SECUN` filled in
+0 of 216,433 records). The field was discontinued in practice at source after 2014; no
+re-download can recover it.
+
+**Consequence.** The `pesticida` flag defined above is **not consistent over time**, because its
+external-cause arm can only ever match in 2014:
+
+| Year | `pesticida` | T60-only |
+|---|---|---|
+| 2014 | 391 | 22 |
+| 2015 | 68 | 64 |
+| 2016–2024 | identical to T60-only | — |
+
+The resulting ~6x drop after 2014 is an artefact of field availability, not an epidemiological
+trend. **For any analysis over time, use `substr(DIAG_PRINC, 1, 3) == "T60"`** (aggregated as
+`sih_n_hosp_t60`), the only definition available consistently across 2014–2024. The `pesticida`
+flag remains the more complete definition *within* 2014 and for non-temporal analysis.
+
+**Residual undercount in 2015+.** In 2014, the 369 admissions caught only via the external-cause
+fields carried a non-T60 principal diagnosis — mostly T65 (278), plus T50 (36), T44 (14), T47 (8)
+and T45 (6). That is, the secondary field was what revealed those cases as pesticide-related.
+From 2015 onward that signal is absent, and the 13,484 T65 and 16,897 T50 admissions in
+2015–2024 cannot be classified. The T60 series is therefore a **conservative lower bound** on
+pesticide hospitalisations. SIM and SINAN are unaffected: `CAUSABAS` and `AGENTE_TOX` are
+populated throughout the series.
 
 ---
 
@@ -195,17 +226,11 @@ included; they live under a different `nivel` value (`regiao,uf,rm,municipio,udh
 excluded by the municipal-level filter.
 
 The overall municipal value is the **Total Cor × Total Sexo × Total Situação de Domicílio**
-cell. Because `label_cor` and `label_sexo` were not carried into the output parquet, that
-cell is recovered indirectly in `08_build_consolidated_base.R`: filter
-`label_sit_dom == "Total Situação de Domicílio"`, then take the **maximum-population** row per
-municipality. The all-race/all-sex total has, by construction, a larger population than any
-subgroup, so the maximum reliably lands on the totals cell. This was verified to select the
-"Total Cor / Total Sexo" row for all 645 municipalities, with no exceptions.
-
-> **Reproducibility note:** retaining `label_cor` and `label_sexo` in the output would let
-> downstream code select the totals cell explicitly (`label_cor == "Total Cor" &
-> label_sexo == "Total Sexo"`) rather than via the population heuristic. The two approaches
-> give identical results today; the explicit filter is recommended if the pipeline is re-run.
+cell. `07_build_outputs.R` retains `label_cor` and `label_sexo` in the output parquet, and
+`08_build_consolidated_base.R` selects that cell explicitly:
+`label_sit_dom == "Total Situação de Domicílio" & label_cor == "Total Cor" &
+label_sexo == "Total Sexo"`, with an `anyDuplicated()` guard on `cod_ibge`. This selects one
+row for each of the 645 municipalities.
 
 ### Known limitations
 

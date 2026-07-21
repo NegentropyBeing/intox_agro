@@ -1,0 +1,757 @@
+---
+title: "SINAN - Pesticide Notification Data Summary"
+author: "Abirami Somasundaram"
+date: "2026-07-03"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## R Markdown
+
+This is an R Markdown document. Markdown is a simple formatting syntax for authoring HTML, PDF, and MS Word documents. For more details on using R Markdown see <http://rmarkdown.rstudio.com>.
+
+When you click the **Knit** button a document will be generated that includes both content as well as the output of any embedded R code chunks within the document. You can embed an R code chunk like this:
+
+```{r}
+install.packages(c("tidyverse", "janitor", "lubridate", "naniar", "skimr", "knitr", "kableExtra", "scales","sf","geobr","viridis","leaflet","htmlwidgets"))
+```
+
+
+
+```{r library, echo=FALSE}
+library(dplyr)
+library(tidyr)
+library(knitr)
+library(ggplot2)
+library(arrow)
+library(purrr)
+library(scales)
+library(tidyverse)
+library(stringr)
+library(ggh4x)
+library(tidyverse)
+library(janitor)
+library(lubridate)
+library(naniar)
+library(skimr)
+library(kableExtra)
+library(sf)
+library(geobr)
+library(viridis)
+library(leaflet)
+library(htmlwidgets)
+
+
+theme_set(theme_minimal())
+```
+
+1. Load Data 
+```{r}
+df_raw <- read_parquet("/Users/abiramisomasundaram/Desktop/Brazil pesticides/Data/Dados Version 2/Dados/resultados/SINAN/sinan_iexo_sp_2014_2024.parquet") 
+  
+df <- df_raw %>%
+clean_names()
+
+glimpse(df)
+
+```
+
+
+2. 
+```{r}
+df <- df %>%
+  mutate(
+    # Keep geographic and categorical codes as strings
+    id_mn_resi = as.character(id_mn_resi),
+    sg_uf = as.character(sg_uf),
+    nu_ano = as.character(nu_ano),
+    ano_nasc = as.character(ano_nasc),
+    cs_sexo = as.character(cs_sexo),
+    cs_raca = as.character(cs_raca),
+    agente_tox = as.character(agente_tox),
+    lavoura = as.character(lavoura),
+    circunstan = as.character(circunstan),
+    evolucao = as.character(evolucao),
+    sit_trab = as.character(sit_trab),
+    hospital = as.character(hospital),
+
+    # Convert years to numeric
+    ano_origem_num = as.numeric(ano_origem),
+    nu_ano_num = as.numeric(nu_ano),
+    ano_nasc_num = as.numeric(ano_nasc),
+
+    # Parse dates flexibly
+    dt_notific_date = as_date(parse_date_time(
+      dt_notific,
+      orders = c("ymd", "dmy", "mdy")
+    )),
+    dt_sin_pri_date = as_date(parse_date_time(
+      dt_sin_pri,
+      orders = c("ymd", "dmy", "mdy")
+    )),
+
+    # Derived age at notification
+    age = nu_ano_num - ano_nasc_num,
+
+    # Days between symptom onset and notification
+    days_symptom_to_notification = as.numeric(dt_notific_date - dt_sin_pri_date),
+
+    # Agricultural context: non-empty LAVOURA
+    agricultural_context = case_when(
+      is.na(lavoura) | str_trim(lavoura) == "" ~ "No crop recorded",
+      TRUE ~ "Crop recorded"
+    ),
+
+    # Sex label
+    sex_label = case_when(
+      cs_sexo == "M" ~ "Male",
+      cs_sexo == "F" ~ "Female",
+      TRUE ~ "Missing/Unknown"
+    ),
+
+    # Race/ethnicity label
+    race_label = case_when(
+      cs_raca == "1" ~ "White",
+      cs_raca == "2" ~ "Black",
+      cs_raca == "3" ~ "Asian/Yellow",
+      cs_raca == "4" ~ "Brown/Pardo",
+      cs_raca == "5" ~ "Indigenous",
+      TRUE ~ "Missing/Unknown"
+    ),
+
+    # Outcome label
+    outcome_label = case_when(
+      evolucao == "1" ~ "Cure",
+      evolucao == "2" ~ "Death from notified condition",
+      evolucao == "3" ~ "Death from other cause",
+      evolucao == "4" ~ "Lost to follow-up",
+      evolucao == "5" ~ "Transfer",
+      evolucao == "9" ~ "Unknown",
+      TRUE ~ "Missing"
+    ),
+
+    # Hospitalisation label
+    hospitalised_label = case_when(
+      hospital == "1" ~ "Yes",
+      hospital == "2" ~ "No",
+      TRUE ~ "Missing/Unknown"
+    ),
+
+    # Circumstance: occupational accident
+    occupational_accident = case_when(
+      circunstan  == "02" ~ "Occupational accident",
+      is.na(circunstan) | str_trim(circunstan) == "" ~ "Missing",
+      TRUE ~ "Other circumstance"
+    )
+  )
+
+glimpse(df)
+```
+
+3. Define Variables
+
+```{r define-vars}
+categorical_vars <- c(
+
+  "sg_uf",
+  "cs_sexo",
+  "sex_label",
+  "cs_raca",
+  "race_label",
+  "agente_tox",
+  "lavoura",
+  "agricultural_context",
+  "circunstan",
+  "occupational_accident",
+  "evolucao",
+  "outcome_label",
+  "sit_trab",
+  "hospital",
+  "hospitalised_label"
+)
+
+numeric_vars <- c(
+  "ano_origem_num",
+  "nu_ano_num",
+  "ano_nasc_num",
+  "age",
+  "days_symptom_to_notification"
+)
+```
+
+
+4. Missingness Summary 
+
+```{r missingness-summary}
+is_missing_value <- function(x) {
+  if (is.character(x)) {
+    is.na(x) | str_trim(x) == ""
+  } else {
+    is.na(x)
+  }
+}
+
+missing_summary <- df %>%
+  summarise(across(
+    everything(),
+    list(
+      missing_n = ~sum(is_missing_value(.)),
+      missing_pct = ~mean(is_missing_value(.)) * 100
+    ),
+    .names = "{.col}_{.fn}"
+  )) %>%
+  pivot_longer(
+    cols = everything(),
+    names_to = c("variable", ".value"),
+    names_pattern = "(.+)_(missing_n|missing_pct)"
+  ) %>%
+  arrange(desc(missing_pct))
+
+missing_summary %>%
+  mutate(missing_pct = round(missing_pct, 2)) %>%
+  kable(
+    caption = "Missingness summary by variable",
+    col.names = c("Variable", "Missing n", "Missing %")
+  ) %>%
+  kable_styling(full_width = FALSE)
+```
+
+5. Visualisation: missingness
+
+```{r missingness-plot, fig.width=9, fig.height=6}
+missingness_plot <- missing_summary %>%
+  filter(missing_pct > 0) %>%
+  mutate(variable = fct_reorder(variable, missing_pct)) %>%
+  ggplot(aes(x = variable, y = missing_pct)) +
+  geom_col(fill = "#2C7FB8") +
+  coord_flip() +
+  scale_y_continuous(labels = percent_format(scale = 1)) +
+  labs(
+    title = "Missingness by variable",
+    subtitle = "Only variables with missingness are shown",
+    x = "Variable",
+    y = "Missing values (%)"
+  )
+
+missingness_plot
+
+ggsave(
+  filename = "/Users/abiramisomasundaram/Desktop/Brazil pesticides/Workspace/Plots/SINAN/missingness_by_variable.jpeg",
+  plot = missingness_plot,
+  width = 9,
+  height = 6,
+  dpi = 300
+)
+```
+
+
+6. Categorical summaries
+
+```{r categorical-summary-function}
+summarise_categorical <- function(data, var) {
+  
+  data %>%
+    mutate(
+      category = as.character(.data[[var]]),
+      category = if_else(
+        is.na(category) | str_trim(category) == "",
+        "Missing",
+        category
+      )
+    ) %>%
+    count(category, name = "n") %>%
+    mutate(
+      variable = var,
+      percent = 100 * n / sum(n)
+    ) %>%
+    select(variable, category, n, percent) %>%
+    arrange(variable, desc(n))
+}
+```
+
+```{r categorical-summary}
+categorical_summary <- map_dfr(
+  categorical_vars,
+  ~summarise_categorical(df, .x)
+)
+
+categorical_summary %>%
+  mutate(percent = round(percent, 2)) %>%
+  kable(
+    caption = "Categorical variable summary: n and %",
+    col.names = c("Variable", "Category", "n", "%") 
+#variable -Name of the categorical variable , category -Category/code/value, n - Absolute frequency/count,percent-Relative frequency/percentage
+  ) %>%
+  kable_styling(full_width = FALSE)
+```
+
+7. . Visualisation: notifications over time
+
+```{r notifications-over-time, fig.width=9, fig.height=5}
+pesticide_notifications_plot <- df %>%
+  filter(!is.na(nu_ano_num)) %>%
+  count(nu_ano_num, name = "n") %>%
+  ggplot(aes(x = nu_ano_num, y = n)) +
+  geom_line(linewidth = 1, color = "#08519C") +
+  geom_point(size = 2, color = "#08519C") +
+  scale_y_continuous(labels = comma) +
+  labs(
+    title = "Pesticide notifications over time",
+    x = "Year of notification",
+    y = "Number of notifications"
+  )
+
+ggsave(
+  filename = "/Users/abiramisomasundaram/Desktop/Brazil pesticides/Workspace/Plots/SINAN/pesticide_notifications_over_time.jpeg",
+  plot = pesticide_notifications_plot,
+  width = 9,
+  height = 6,
+  dpi = 300
+)
+```
+
+8. Visualisation: outcome by occupational accident status
+
+```{r outcome-by-occupational-status-heatmap, fig.width=9, fig.height=5}
+outcome_occupational_heatmap <- df %>%
+  count(occupational_accident, outcome_label, name = "n") %>%
+  group_by(occupational_accident) %>%
+  mutate(percent = 100 * n / sum(n)) %>%
+  ungroup() %>%
+  ggplot(aes(
+    x = occupational_accident,
+    y = outcome_label,
+    fill = percent
+  )) +
+  geom_tile(color = "white") +
+  geom_text(
+    aes(label = paste0(round(percent, 1), "%\n", "n=", n)),
+    size = 3
+  ) +
+  scale_fill_gradientn(
+    colors = c(
+      "white",
+      "#FFFFB2",
+      "#FECC5C",
+      "#FD8D3C",
+      "#F03B20",
+      "#BD0026",
+      "#800026"
+    ),
+    labels = percent_format(scale = 1)
+  ) +
+  labs(
+    title = "Outcome distribution by occupational accident status",
+    x = "Circumstance of exposure",
+    y = "Outcome",
+    fill = "Percentage"
+  ) +
+  theme_minimal() +
+  theme(
+    axis.text.x = element_text(angle = 30, hjust = 1)
+  )
+
+outcome_occupational_heatmap
+
+ggsave(
+  filename = "//Users/abiramisomasundaram/Desktop/Brazil pesticides/Workspace/Plots/SINAN/outcome_distribution_by_occupational_accident.jpeg",
+  plot = outcome_occupational_heatmap,
+  width = 10,
+  height = 7,
+  dpi = 300
+)
+```
+
+
+9. Top 10 municipalites with Highest Pesticide Notification
+
+```{r top-10-municipalities, fig.width=9, fig.height=6}
+top10_municipalities <- df %>%
+  filter(
+    !is.na(id_mn_resi),
+    stringr::str_trim(id_mn_resi) != ""
+  ) %>%
+  count(id_mn_resi, name = "n_notifications") %>%
+  arrange(desc(n_notifications)) %>%
+  slice_head(n = 10)
+
+top10_municipalities %>%
+  mutate(
+    id_mn_resi = forcats::fct_reorder(id_mn_resi, n_notifications)
+  ) %>%
+  ggplot(aes(x = id_mn_resi, y = n_notifications)) +
+  geom_col(fill = "#2C7FB8") +
+  coord_flip() +
+  geom_text(
+    aes(label = n_notifications),
+    hjust = -0.1,
+    size = 3.5
+  ) +
+  scale_y_continuous(
+    labels = scales::comma,
+    expand = expansion(mult = c(0, 0.12))
+  ) +
+  labs(
+    title = "Top 10 municipalities by number of pesticide notifications",
+    x = "Municipality of residence, IBGE code",
+    y = "Number of notifications"
+  ) +
+  theme_minimal()
+
+```
+
+
+
+---------------------------------------------
+Maps for SINAN Data - Pesticide Notifications
+---------------------------------------------
+
+```{r}
+# Read shapefile
+sp_municipios <- st_read("/Users/abiramisomasundaram/Desktop/Brazil pesticides/Workspace/SHAPEFILES FOR MAPS-SAO PAULO BRAZIL/SP_Municipios_2025_with 6 digit/SP_Municipios_2025/SP_Municipios_2025.shp")
+
+pop_df <- read_parquet("/Users/abiramisomasundaram/Desktop/Brazil pesticides/Data/Dados Version 2/Dados/resultados/contextual/populacao_sp_municipio_ano.parquet")
+
+# Clean shapefile
+sp_municipios_clean <- sp_municipios %>%
+  mutate(
+    muni_code = as.character(COD_6),
+    muni_code = str_trim(muni_code),
+    muni_name = as.character(NM_MUN)
+  ) %>%
+  st_make_valid()
+```
+Annual Pesticide Notification Count from exsisting df
+```{r}
+yearly_notifications <- df %>%
+  mutate(
+    muni_code = as.character(id_mn_resi),
+    muni_code = str_trim(muni_code),
+    year = as.integer(nu_ano_num)
+  ) %>%
+  filter(
+    !is.na(muni_code),
+    muni_code != "",
+    !is.na(year)
+  ) %>%
+  count(muni_code, year, name = "n_notifications")
+
+years_available <- sort(unique(yearly_notifications$year))
+
+```
+
+Clean population data
+
+```{r}
+population_clean <- pop_df %>%
+  mutate(
+    muni_code = as.character(cod_ibge),
+    muni_code = str_trim(muni_code),
+    year = as.integer(ano),
+    populacao = as.numeric(populacao)
+  ) %>%
+  group_by(muni_code, year) %>%
+  summarise(
+    population = sum(populacao, na.rm = TRUE),
+    .groups = "drop"
+  )
+
+```
+
+# Municipality-year grid
+```{r}
+
+municipality_year_grid <- expand_grid(
+  muni_code = sp_municipios_clean$muni_code,
+  year = years_available
+)
+
+```
+
+# Calculate rates
+```{r}
+yearly_rates <- municipality_year_grid %>%
+  left_join(yearly_notifications, by = c("muni_code", "year")) %>%
+  left_join(population_clean, by = c("muni_code", "year")) %>%
+  mutate(
+    n_notifications = replace_na(n_notifications, 0),
+    notification_rate_100k = if_else(
+      !is.na(population) & population > 0,
+      100000 * n_notifications / population,
+      NA_real_
+    )
+  )
+```
+
+# Join to shapefile
+```{r}
+
+sp_map_yearly_rates <- sp_municipios_clean %>%
+  left_join(yearly_rates, by = "muni_code") %>%
+  st_transform(4326)
+
+```
+
+# Create Rate Categories
+```{r}
+# Create rate categories
+sp_map_yearly_rates <- sp_map_yearly_rates %>%
+  mutate(
+    rate_category = cut(
+      notification_rate_100k,
+      breaks = c(-Inf, 0, 1, 5, 10, 25, 50, 100, Inf),
+      labels = c(
+        "0",
+        ">0–1",
+        ">1–5",
+        ">5–10",
+        ">10–25",
+        ">25–50",
+        ">50–100",
+        ">100"
+      ),
+      right = TRUE
+    )
+  )
+```
+
+
+# Static Maps 
+```{r}
+# Years to show
+selected_years <- c(2014, 2017, 2021, 2024)
+
+# Make sure year is numeric/integer
+sp_map_selected_proj <- sp_map_yearly_rates %>%
+  mutate(year = as.integer(year)) %>%
+  filter(year %in% selected_years) %>%
+  st_transform(5880)
+
+#Rate Categories
+sp_map_selected_proj <- sp_map_selected_proj %>%
+  mutate(
+    rate_category = cut(
+      notification_rate_100k,
+      breaks = c(-Inf, 0, 1, 5, 10, 25, 50, 100, Inf),
+      labels = c(
+        "0",
+        ">0–1",
+        ">1–5",
+        ">5–10",
+        ">10–25",
+        ">25–50",
+        ">50–100",
+        ">100"
+      ),
+      right = TRUE
+    )
+  )
+#labels the municipality with the highest rate in each selected year.
+label_data <- sp_map_selected_proj %>%
+  filter(
+    !is.na(notification_rate_100k),
+    n_notifications >= 5
+  ) %>%
+  group_by(year) %>%
+  slice_max(notification_rate_100k, n = 1, with_ties = FALSE) %>%
+  ungroup() %>%
+  mutate(
+    label_text = paste0(
+      muni_name,
+      "\nRate: ",
+      round(notification_rate_100k, 1),
+      " per 100k",
+      "\nn = ",
+      n_notifications
+    )
+  ) %>%
+  st_point_on_surface()
+
+
+```
+
+
+ 
+# Hot colour palette
+
+```{r}
+rate_map_selected_blue <- ggplot(sp_map_selected_proj) +
+  geom_sf(
+    aes(fill = rate_category),
+    color = "white",
+    linewidth = 0.05
+  ) +
+  geom_sf_label(
+    data = label_data,
+    aes(label = label_text),
+    size = 3,
+    label.size = 0.15,
+    fill = "white",
+    alpha = 0.9,
+    lineheight = 0.9
+  ) +
+  facet_wrap(~ year, ncol = 2) +
+  scale_fill_manual(
+    values = c(
+      "0" = "#FFFFFF",
+      ">0–1" = "#EFF3FF",
+      ">1–5" = "#C6DBEF",
+      ">5–10" = "#9ECAE1",
+      ">10–25" = "#6BAED6",
+      ">25–50" = "#3182BD",
+      ">50–100" = "#08519C",
+      ">100" = "#08306B"
+    ),
+    na.value = "grey80",
+    drop = FALSE
+  ) +
+  labs(
+    title = "Pesticide notification rates by municipality",
+    subtitle = "State of São Paulo, Brazil",
+    fill = "Notifications\nper 100,000",
+    caption = "Rates calculated as annual pesticide notifications per 100,000 municipal residents. Label shows the highest-rate municipality in each year."
+  ) +
+  theme_minimal(base_size = 12) +
+  theme(
+    axis.text = element_blank(),
+    axis.ticks = element_blank(),
+    axis.title = element_blank(),
+    panel.grid = element_blank(),
+    strip.text = element_text(face = "bold", size = 13),
+    legend.position = "right",
+    legend.title = element_text(face = "bold"),
+    plot.title = element_text(face = "bold", size = 16),
+    plot.subtitle = element_text(size = 12),
+    plot.caption = element_text(size = 9)
+  )
+
+rate_map_selected_blue
+ggsave(
+  filename = "/Users/abiramisomasundaram/Desktop/Brazil pesticides/Workspace/Plots/SINAN/Pesticide_notification_rate_map.jpeg",
+  plot = rate_map_selected_blue,
+  width = 10,
+  height = 7,
+  dpi = 300
+)
+
+
+```
+
+----------------------------------------
+SISAUGA DATA 
+--------------------------------
+
+
+```{r}
+ #File paths
+parquet_path <- "/Users/abiramisomasundaram/Desktop/Brazil pesticides/Data/Dados Version 2/Dados/resultados/base_consolidada_sp_2014_2024.parquet"
+shapefile_path <- "/Users/abiramisomasundaram/Desktop/Brazil pesticides/Workspace/SHAPEFILES FOR MAPS-SAO PAULO BRAZIL/SP_Municipios_2025_with 6 digit/SP_Municipios_2025/SP_Municipios_2025.shp"
+
+# Read Parquet file
+sisagua <- read_parquet(parquet_path)
+
+# Read São Paulo municipality shapefile
+sp_mun <- st_read(shapefile_path, quiet = TRUE)
+
+# Check column names if needed
+names(sisagua)
+names(sp_mun)
+```
+
+
+# Prepare Sisauga Data 
+
+```{r}
+years_keep <- c(2014, 2017, 2021, 2024)
+
+sisagua_map <- sisagua %>%
+  mutate(
+    cod_ibge = as.character(cod_ibge),
+    ano = as.integer(ano),
+    sisagua_pct_deteccao = as.numeric(sisagua_pct_deteccao)
+  ) %>%
+  filter(ano %in% years_keep) %>%
+  group_by(cod_ibge, nome_municipio, ano) %>%
+  summarise(
+    sisagua_pct_deteccao = mean(sisagua_pct_deteccao, na.rm = TRUE),
+    .groups = "drop"
+  ) %>%
+  mutate(
+    sisagua_pct_deteccao = ifelse(
+      is.nan(sisagua_pct_deteccao),
+      NA,
+      sisagua_pct_deteccao
+    )
+  )
+```
+
+
+```{r}
+
+sp_mun_clean <- sp_mun %>%
+  st_make_valid() %>%
+  mutate(
+    cod_ibge = as.character(COD_6)
+  )
+
+```
+
+
+## Join data to shapefile
+
+```{r}
+sp_map <- sp_mun_clean %>%
+  left_join(sisagua_map, by = "cod_ibge")
+```
+
+## Create choropleth map
+
+```{r fig.width=12, fig.height=9}
+p_map <- ggplot(sp_map) +
+  geom_sf(
+    aes(fill = sisagua_pct_deteccao),
+    color = "white",
+    linewidth = 0.1
+  ) +
+  facet_wrap(~ ano, ncol = 2) +
+  scale_fill_gradientn(
+    colors = c("#ffffb2", "#fecc5c", "#fd8d3c", "#f03b20", "#bd0026"),
+    limits = c(0, 100),
+    breaks = c(0, 25, 50, 75, 100),
+    labels = c("0%", "25%", "50%", "75%", "100%"),
+    na.value = "grey85",
+    name = "Samples with\nquantifiable\ndetection"
+  ) +
+  labs(
+    title = "Percentage of Samples with Quantifiable Detection",
+    subtitle = "Municipalities of São Paulo, Brazil, 2014, 2017, 2021, and 2024",
+    caption = "Grey areas indicate missing data"
+  ) +
+  theme_minimal() +
+  theme(
+    axis.text = element_blank(),
+    axis.title = element_blank(),
+    panel.grid = element_blank(),
+    strip.text = element_text(face = "bold", size = 12),
+    plot.title = element_text(face = "bold", size = 16),
+    legend.position = "right"
+  )
+
+p_map
+
+ggsave(
+  filename = "/Users/abiramisomasundaram/Desktop/Brazil pesticides/Workspace/Plots/sisagua_detection_sao_paulo_map.jpeg",
+  plot = p_map,
+  width = 12,
+  height = 9,
+  units = "in",
+  dpi = 300
+)
+
+
+```
+
+

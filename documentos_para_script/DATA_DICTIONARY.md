@@ -26,7 +26,7 @@ All sources below are joined here. Variable groups can be included or excluded v
 | Variable | Type | Source | Description |
 |---|---|---|---|
 | `cod_ibge` | string | — | 6-digit IBGE municipality code |
-| `nome_municipio` | string | geobr | Municipality name (IBGE canonical, e.g. `"Campinas"`) |
+| `nome_municipio` | string | SIDRA T9606 | Municipality name (IBGE canonical, e.g. `"Campinas"`) |
 | `ano` | integer | — | Calendar year (2014–2024) |
 
 ### Population (aggregated from `populacao_sp_municipio_ano.parquet`)
@@ -170,13 +170,13 @@ All sources below are joined here. Variable groups can be included or excluded v
 | `MUNIC_MOV` | string | Municipality of the hospital |
 | `CNES` | string | Healthcare facility code (7 digits) |
 | `NASC` | string | Patient date of birth |
-| `COD_IDADE` | string | Age unit: `1`=hours, `2`=days, `3`=months, `4`=years |
-| `IDADE` | string | Patient age (in units given by `COD_IDADE`) |
+| `COD_IDADE` | string | Age unit, stored **decoded** (not as the raw DATASUS digit): `"Anos"` (75,654), `"Meses"` (800), `"Dias"` (67), `"Centena de anos (100 + idade)"` (6). There is no `"Horas"` value in this file |
+| `IDADE` | string | Patient age in the units given by `COD_IDADE`. **Stored as a string, not zero-padded** (`"0"`, `"1"`, … `"9"`, `"10"`, …) — see the age-filtering warning below |
 | `SEXO` | string | Sex: `1`=male, `3`=female, `0`=NA |
 | `RACA_COR` | string | Race/ethnicity (coded) |
-| `DIAG_PRINC` | string | Primary diagnosis (ICD-10) |
-| `DIAG_SECUN` | string | Secondary diagnosis (ICD-10) |
-| `CID_ASSO` | string | Associated diagnosis (ICD-10) |
+| `DIAG_PRINC` | string | Primary diagnosis (ICD-10, **no dot, 4 chars** — see Appendix A). Carries the **T** code (nature of the substance), e.g. `"T600"` |
+| `DIAG_SECUN` | string | Secondary diagnosis (ICD-10, **no dot, 4 chars**). Where the **X/Y external-cause** code normally lives, e.g. `"X689"`. `"0000"` = not filled (69,976 records) |
+| `CID_ASSO` | string | Associated diagnosis (ICD-10, **no dot, 4 chars**) |
 | `CID_MORTE` | string | ICD-10 code of death cause (when applicable) |
 | `MORTE` | string | In-hospital death: `"Sim"` = yes, `"Não"` = no |
 | `DIAS_PERM` | string | Length of stay (days) |
@@ -185,10 +185,43 @@ All sources below are joined here. Variable groups can be included or excluded v
 | `VAL_TOT` | string | Total reimbursement value (BRL) |
 | `pesticida` | logical | **Pesticide-specific flag (issue #7):** `TRUE` if `DIAG_PRINC` is T60 **or** a pesticide external-cause code (X48/X68/X87/Y18) appears in `DIAG_PRINC`, `DIAG_SECUN`, or `CID_ASSO` |
 
-> **Pesticide-specific cases:** use the `pesticida` flag. It generalises the older
-> `substr(DIAG_PRINC, 1, 3) == "T60"` rule (still valid for T60-only) by also catching
+> **⚠️ Filtering by age — `IDADE` is a string.** Comparing it directly against a number
+> (`IDADE <= 14`) triggers a **lexicographic** comparison, which silently drops ages 2–9
+> (`"5" <= "14"` is `FALSE`, because `"5"` sorts after `"1"`). It throws no error and returns
+> a plausible-looking subset. Always coerce first:
+>
+> ```r
+> # WRONG — silently drops ages 2-9
+> filter(COD_IDADE == "Anos" & IDADE <= 14)
+> # RIGHT
+> filter(COD_IDADE %in% c("Dias", "Meses") | (COD_IDADE == "Anos" & as.integer(IDADE) <= 14))
+> ```
+>
+> Include `"Dias"`/`"Meses"` to keep infants; exclude `"Centena de anos (100 + idade)"`.
+> On the T60 subset this is the difference between **69** and **32** paediatric records.
+>
+> **Pesticide-specific cases:** use the `pesticida` flag (1,127 `TRUE`) for **non-temporal**
+> analysis. It generalises the older `substr(DIAG_PRINC, 1, 3) == "T60"` rule by also catching
 > pesticide external-cause codes in the secondary/associated diagnosis fields.
 > Use `MUNIC_RES`, not `MUNIC_MOV`, for patient's municipality of residence.
+>
+> **⚠️ Do not use the `pesticida` flag for trends over time — use `DIAG_PRINC` T60 instead.**
+> `DIAG_SECUN` and `CID_ASSO` are filled in **2014 only** (99.6% of 2014 records; **0%** in
+> 2015–2024 — verified against the raw pre-consolidated file and against a fresh DATASUS
+> download, so this is a source-side discontinuation, not a pipeline bug). The flag's extra
+> reach therefore exists only in 2014, making it **time-inconsistent**: it yields 391 records in
+> 2014 vs 68 in 2015, and from 2016 on it is identical to T60-only. That ~6x drop is a pure
+> artefact. For any analysis over time — including trends in case characteristics — use
+> `substr(DIAG_PRINC, 1, 3) == "T60"`, the only definition that is consistent across 2014–2024.
+>
+> **Where each code lives — expect (almost) no X/Y in `DIAG_PRINC`.** SIH codes the
+> *nature* of the poisoning in the principal diagnosis (T60 = pesticide, 754 records) and the
+> *external cause / intent* in the secondary fields (X48/X68/X87/Y18: 379 in `DIAG_SECUN`,
+> 14 in `CID_ASSO`, only **9** in `DIAG_PRINC`). Searching the principal diagnosis for X/Y
+> codes and getting ~nothing is the **expected** result, not a data error. The two sets
+> barely overlap, which is why the `pesticida` flag is `T60 OR X/Y-anywhere` = 1,127.
+> Note this differs from SIM, which filters `CAUSABAS` (underlying cause) and therefore keys
+> pesticide deaths on the **X/Y** codes, not T60 — see Section 4.
 
 ---
 
@@ -239,7 +272,7 @@ Key analytical variables:
 | Variable | Type | Description |
 |---|---|---|
 | `DTOBITO` | string | Date of death (format `"YYYY-MM-DD"`) |
-| `CAUSABAS` | string | Underlying cause of death (ICD-10) |
+| `CAUSABAS` | string | Underlying cause of death (ICD-10, **no dot, always 4 chars** — see Appendix A), e.g. `"X689"` |
 | `CAUSABAS_O` | string | Original underlying cause as recorded |
 | `CODMUNRES` | string | **Municipality of patient's residence** (6-digit IBGE code) |
 | `CODMUNOCOR` | string | Municipality of occurrence of death |
@@ -253,6 +286,14 @@ Key analytical variables:
 | `ASSISTMED` | string | Medical assistance received |
 
 > Extract year from `DTOBITO` with `substr(DTOBITO, 1, 4)`. Use `CODMUNRES` for municipality of residence.
+>
+> **Pesticide deaths key on X/Y, not T60.** SIM filters the *underlying* cause (`CAUSABAS`),
+> which for a fatal poisoning is the external-cause code — so the pesticide subset here is
+> `substr(CAUSABAS, 1, 3) %in% c("X48","X68","X87","Y18")` (698 deaths), **not** T60. This is
+> the mirror image of SIH, where the pesticide subset keys on T60 in the principal diagnosis
+> (see Section 2). Aggregated in the consolidated base as `sim_n_obitos_pesticida`, with the
+> four intent subtypes (`_acidental` X48, `_autoprovocado` X68, `_agressao` X87,
+> `_indeterminado` Y18). All codes are 4 characters — an exact match on `"X48"` returns **0**.
 
 ---
 
@@ -529,7 +570,7 @@ caged <- open_dataset("./resultados/CAGED/") |> collect()
 ### IVS — Social Vulnerability Index
 
 **File:** `resultados/contextual/ivs_municipios_sp_2010.parquet`
-**Grain:** multiple rows per municipality — demographic breakdowns by race (`label_cor`: Branco / Negro / Total Cor) × sex (`label_sexo`: Homem / Mulher / Total Sexo), each further split by household situation (`label_sit_dom`). **Note:** `label_cor` and `label_sexo` were not retained in this output file. To obtain the overall municipal value, filter `label_sit_dom == "Total Situação de Domicílio"` and take the **maximum-population** row per municipality — this is the "Total Cor × Total Sexo" cell, whose population is by construction larger than any subgroup (verified for all 645 municipalities). Weighting areas (UDH) are *not* present here; they were excluded at the `nivel` filter in `07_build_outputs.R`.
+**Grain:** multiple rows per municipality — demographic breakdowns by race (`label_cor`: Branco / Negro / Total Cor) × sex (`label_sexo`: Homem / Mulher / Total Sexo), each further split by household situation (`label_sit_dom`). **Note:** to obtain the overall municipal value, filter `label_sit_dom == "Total Situação de Domicílio" & label_cor == "Total Cor" & label_sexo == "Total Sexo"` — this selects one row per municipality (645/645). Weighting areas (UDH) are *not* present here; they were excluded at the `nivel` filter in `07_build_outputs.R`.
 **Period:** Census 2010
 **Source:** IPEA / Atlas do Desenvolvimento Humano
 
@@ -587,6 +628,31 @@ Key variables: `cod_ibge`, `ivs`, `ivs_infraestrutura_urbana`, `ivs_capital_huma
 
 ## Appendix A — ICD-10 Codes Used for Intoxication Filtering
 
+> ### ⚠️ Code format: DATASUS stores ICD-10 codes **without the dot**
+>
+> Throughout this appendix codes are written in the conventional dotted notation
+> (`T60.0`, `X48`) for readability. **The data does not use it.** DATASUS stores the
+> code as a 4-character string with no punctuation, the 4th character being the
+> subcategory: `T60.0` → `"T600"`, `X48.9` → `"X489"`. Three-character strings such as
+> `"T60"` do occur, but they are rare (340 of 76,527 SIH records) — they mean the
+> subcategory was never coded, **not** "any T60".
+>
+> **Consequence:** an exact match returns zero or near-zero and looks like a bug.
+> `CAUSABAS %in% c("X48","X68","X87","Y18")` matches **0 of 6,564** SIM deaths, because
+> every code there is 4 characters. Always match on the prefix:
+>
+> ```r
+> # wrong — silently returns (almost) nothing
+> filter(d, DIAG_PRINC %in% c("X48", "X68", "X87", "Y18"))
+>
+> # right
+> filter(d, substr(DIAG_PRINC, 1, 3) %in% c("X48", "X68", "X87", "Y18"))
+> ```
+>
+> For pesticide-specific cases you normally do not need to filter by code at all —
+> use the pre-computed `pesticida` flag (SIH, SINAN) or the `*_pesticida` columns in
+> the consolidated base. See Section 1.
+
 Applied consistently across SIH, SINAN, and SIM:
 
 | Range | Category |
@@ -598,15 +664,17 @@ Applied consistently across SIH, SINAN, and SIM:
 
 ### T60 subcategories (pesticide-specific)
 
-| Code | Description |
-|---|---|
-| T60.0 | Organophosphate and carbamate insecticides |
-| T60.1 | Halogenated insecticides |
-| T60.2 | Other insecticides |
-| T60.3 | Herbicides and fungicides |
-| T60.4 | Rodenticides |
-| T60.8 | Other pesticides |
-| T60.9 | Pesticide, unspecified |
+Stored value = code without the dot (see the format warning above).
+
+| Code | Stored as | Description |
+|---|---|---|
+| T60.0 | `T600` | Organophosphate and carbamate insecticides |
+| T60.1 | `T601` | Halogenated insecticides |
+| T60.2 | `T602` | Other insecticides |
+| T60.3 | `T603` | Herbicides and fungicides |
+| T60.4 | `T604` | Rodenticides |
+| T60.8 | `T608` | Other pesticides |
+| T60.9 | `T609` | Pesticide, unspecified |
 
 ---
 

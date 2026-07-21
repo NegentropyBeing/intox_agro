@@ -1,0 +1,1154 @@
+---
+title: "SINAN_Quartiles"
+author: "Abirami Somasundaram"
+date: "2026-07-07"
+output: html_document
+---
+Explanation of this code: 
+1. Calculate incidence per 100,000 for each municipality-year
+2. Sort municipality-years from lowest to highest incidence
+3. Split them into 4 approximately equal-sized groups
+4. Label them Q1, Q2, Q3, Q4
+5. Summarize n, %, median, range, and missingness
+
+For pesticide notification incidence, the code uses three core variables:ID_MN_RESI,ano_origem,populacao
+population variables: cod_ibge,ano,populacao
+
+Incidence calculation rate formula: 
+incidence_100k = cases / population * 100000
+
+
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## R Markdown
+
+This is an R Markdown document. Markdown is a simple formatting syntax for authoring HTML, PDF, and MS Word documents. For more details on using R Markdown see <http://rmarkdown.rstudio.com>.
+
+When you click the **Knit** button a document will be generated that includes both content as well as the output of any embedded R code chunks within the document. You can embed an R code chunk like this:
+
+```{r}
+library(arrow)
+library(dplyr)
+library(tidyr)
+library(stringr)
+library(ggplot2)
+library(scales)
+library(forcats)
+library(readr)
+
+```
+
+1. Load Data
+```{r}
+pesticide_path  <- "/Users/abiramisomasundaram/Desktop/Brazil pesticides/Data/Dados Version 2/Dados/resultados/SINAN/sinan_iexo_sp_2014_2024.parquet"
+
+population_path <- "/Users/abiramisomasundaram/Desktop/Brazil pesticides/Data/Dados Version 2/Dados/resultados/contextual/populacao_sp_municipio_ano.parquet"
+
+output_dir <- "outputs"
+
+if (!dir.exists(output_dir)) {
+  dir.create(output_dir, recursive = TRUE)
+}
+
+```
+
+2. 
+```{r}
+pesticide_raw <- read_parquet(pesticide_path)
+population_raw <- read_parquet(population_path)
+
+# Check variable names
+names(pesticide_raw)
+names(population_raw)
+
+```
+
+3. Missingness function
+
+```{r}
+is_missing_value <- function(x) {
+  is.na(x) | trimws(as.character(x)) == ""
+}
+
+# Missingness report
+missingness_report <- function(data, vars) {
+  data %>%
+    summarise(
+      across(
+        all_of(vars),
+        list(
+          missing_n = ~sum(is_missing_value(.)),
+          missing_percent = ~mean(is_missing_value(.)) * 100
+        ),
+        .names = "{.col}_{.fn}"
+      )
+    ) %>%
+    pivot_longer(
+      cols = everything(),
+      names_to = "variable_stat",
+      values_to = "value"
+    ) %>%
+    mutate(
+      stat = case_when(
+        str_detect(variable_stat, "_missing_n$") ~ "missing_n",
+        str_detect(variable_stat, "_missing_percent$") ~ "missing_percent",
+        TRUE ~ NA_character_
+      ),
+      variable = variable_stat %>%
+        str_remove("_missing_n$") %>%
+        str_remove("_missing_percent$")
+    ) %>%
+    select(variable, stat, value) %>%
+    pivot_wider(
+      names_from = stat,
+      values_from = value
+    ) %>%
+    mutate(
+      missing_n = as.integer(missing_n),
+      missing_percent = round(missing_percent, 2)
+    ) %>%
+    arrange(desc(missing_percent))
+}
+
+# Quartile or quantile summary function
+quantile_summary <- function(data, variable, groups = 4, group_label = "Q") {
+  
+  variable <- rlang::ensym(variable)
+  
+  total_n <- nrow(data)
+  
+  missing_n <- data %>%
+    summarise(missing_n = sum(is.na(!!variable))) %>%
+    pull(missing_n)
+  
+  missing_percent <- missing_n / total_n * 100
+  
+  data %>%
+    filter(!is.na(!!variable)) %>%
+    mutate(
+      quantile_group_num = ntile(!!variable, groups),
+      quantile_group = paste0(group_label, quantile_group_num)
+    ) %>%
+    group_by(quantile_group_num, quantile_group) %>%
+    summarise(
+      n = n(),
+      median = median(!!variable, na.rm = TRUE),
+      min = min(!!variable, na.rm = TRUE),
+      max = max(!!variable, na.rm = TRUE),
+      .groups = "drop"
+    ) %>%
+    mutate(
+      percent = n / sum(n) * 100,
+      range = paste0(round(min, 2), "–", round(max, 2)),
+      missing_n = missing_n,
+      missing_percent = missing_percent
+    ) %>%
+    select(
+      quantile_group,
+      n,
+      percent,
+      median,
+      min,
+      max,
+      range,
+      missing_n,
+      missing_percent
+    ) %>%
+    mutate(
+      percent = round(percent, 2),
+      median = round(median, 2),
+      min = round(min, 2),
+      max = round(max, 2),
+      missing_percent = round(missing_percent, 2)
+    )
+}
+
+```
+
+
+4. Quartile summary by year
+```{r}
+quartile_summary_by_year <- function(data, variable, year_var, groups = 4, group_label = "Q") {
+  
+  variable <- rlang::ensym(variable)
+  year_var <- rlang::ensym(year_var)
+  
+  data %>%
+    group_by(!!year_var) %>%
+    mutate(
+      total_n_year = n(),
+      missing_n = sum(is.na(!!variable)),
+      missing_percent = missing_n / total_n_year * 100
+    ) %>%
+    filter(!is.na(!!variable)) %>%
+    mutate(
+      quantile_group_num = ntile(!!variable, groups),
+      quantile_group = paste0(group_label, quantile_group_num)
+    ) %>%
+    group_by(!!year_var, quantile_group_num, quantile_group) %>%
+    summarise(
+      n = n(),
+      median = median(!!variable, na.rm = TRUE),
+      min = min(!!variable, na.rm = TRUE),
+      max = max(!!variable, na.rm = TRUE),
+      missing_n = first(missing_n),
+      missing_percent = first(missing_percent),
+      .groups = "drop"
+    ) %>%
+    group_by(!!year_var) %>%
+    mutate(
+      percent = n / sum(n) * 100,
+      range = paste0(round(min, 2), "–", round(max, 2))
+    ) %>%
+    ungroup() %>%
+    select(
+      !!year_var,
+      quantile_group,
+      n,
+      percent,
+      median,
+      min,
+      max,
+      range,
+      missing_n,
+      missing_percent
+    ) %>%
+    mutate(
+      percent = round(percent, 2),
+      median = round(median, 2),
+      min = round(min, 2),
+      max = round(max, 2),
+      missing_percent = round(missing_percent, 2)
+    )
+}
+
+# Safe rate function
+rate_per_100k <- function(numerator, denominator) {
+  if_else(
+    !is.na(denominator) & denominator > 0,
+    numerator / denominator * 100000,
+    NA_real_
+  )
+}
+
+```
+
+5. Clean SINAN data 
+
+```{r}
+ibge_width <- 6
+
+pesticide_clean <- pesticide_raw %>%
+  mutate(
+    ID_MN_RESI = str_pad(as.character(ID_MN_RESI), width = ibge_width, pad = "0"),
+    SG_UF = as.character(SG_UF),
+    ano_origem = as.integer(ano_origem),
+    NU_ANO = as.integer(NU_ANO),
+    
+    ANO_NASC = suppressWarnings(as.integer(ANO_NASC)),
+    
+    CS_SEXO = as.character(CS_SEXO),
+    CS_RACA = as.character(CS_RACA),
+    AGENTE_TOX = as.character(AGENTE_TOX),
+    LAVOURA = as.character(LAVOURA),
+    CIRCUNSTAN = as.character(CIRCUNSTAN),
+    EVOLUCAO = as.character(EVOLUCAO),
+    SIT_TRAB = as.character(SIT_TRAB),
+    HOSPITAL = as.character(HOSPITAL),
+    
+    idade = ano_origem - ANO_NASC,
+    idade = if_else(idade < 0 | idade > 120, NA_integer_, idade),
+    
+    sex_label = case_when(
+      CS_SEXO == "M" ~ "Male",
+      CS_SEXO == "F" ~ "Female",
+      TRUE ~ "Missing/Unknown"
+    ),
+    
+    occupational = CIRCUNSTAN == "02",
+    agricultural = !is.na(LAVOURA) & trimws(LAVOURA) != "",
+    
+    death_intoxication = EVOLUCAO == "2",
+    death_any_reported = EVOLUCAO %in% c("2", "3"),
+    
+    hospitalized = HOSPITAL == "1"
+  )
+
+```
+
+6. Clean Population data 
+
+```{r}
+
+population_clean <- population_raw %>%
+  mutate(
+    cod_ibge = str_pad(as.character(cod_ibge), width = ibge_width, pad = "0"),
+    ano = as.integer(ano),
+    sexo = as.character(sexo),
+    idade = as.integer(idade),
+    populacao = as.numeric(populacao)
+  )
+```
+
+7. Missingness report 
+
+```{r} 
+pesticide_vars <- c(
+  "ID_MN_RESI",
+  "SG_UF",
+  "ano_origem",
+  "NU_ANO",
+  "DT_NOTIFIC",
+  "DT_SIN_PRI",
+  "ANO_NASC",
+  "CS_SEXO",
+  "CS_RACA",
+  "AGENTE_TOX",
+  "LAVOURA",
+  "CIRCUNSTAN",
+  "EVOLUCAO",
+  "SIT_TRAB",
+  "HOSPITAL"
+)
+
+population_vars <- c(
+  "cod_ibge",
+  "ano",
+  "sexo",
+  "idade",
+  "populacao"
+)
+
+pesticide_missingness <- missingness_report(
+  data = pesticide_clean,
+  vars = pesticide_vars
+)
+
+population_missingness <- missingness_report(
+  data = population_clean,
+  vars = population_vars
+)
+
+```
+
+
+8. Aggregate pesticide notifications by municipality-year
+
+```{r}
+pesticide_muni_year <- pesticide_clean %>%
+  filter(
+    !is.na(ID_MN_RESI),
+    !is.na(ano_origem)
+  ) %>%
+  group_by(ID_MN_RESI, ano_origem) %>%
+  summarise(
+    cases = n(),
+    
+    deaths_intoxication = sum(death_intoxication, na.rm = TRUE),
+    deaths_any_reported = sum(death_any_reported, na.rm = TRUE),
+    
+    hospitalized_n = sum(hospitalized, na.rm = TRUE),
+    occupational_n = sum(occupational, na.rm = TRUE),
+    agricultural_n = sum(agricultural, na.rm = TRUE),
+    
+    male_n = sum(CS_SEXO == "M", na.rm = TRUE),
+    female_n = sum(CS_SEXO == "F", na.rm = TRUE),
+    
+    median_age_cases = median(idade, na.rm = TRUE),
+    
+    .groups = "drop"
+  ) %>%
+  mutate(
+    median_age_cases = if_else(
+      is.nan(median_age_cases),
+      NA_real_,
+      median_age_cases
+    )
+  )
+
+```
+
+9. Aggregate population by municipality-year
+```{r}
+population_muni_year <- population_clean %>%
+  filter(
+    !is.na(cod_ibge),
+    !is.na(ano)
+  ) %>%
+  group_by(cod_ibge, ano) %>%
+  summarise(
+    population = sum(populacao, na.rm = TRUE),
+    .groups = "drop"
+  )
+```
+
+
+10. Check pesticide municipality-years without population
+
+```{r}
+unmatched_pesticide_population <- pesticide_muni_year %>%
+  anti_join(
+    population_muni_year,
+    by = c("ID_MN_RESI" = "cod_ibge", "ano_origem" = "ano")
+  )
+
+```
+
+
+11. Join population and pesticide data
+
+```{r}
+# This keeps all municipality-years from the population data.
+# Municipality-years with no notifications become zero-case observations.
+
+analysis_df <- population_muni_year %>%
+  left_join(
+    pesticide_muni_year,
+    by = c("cod_ibge" = "ID_MN_RESI", "ano" = "ano_origem")
+  ) %>%
+  mutate(
+    cases = replace_na(cases, 0L),
+    deaths_intoxication = replace_na(deaths_intoxication, 0L),
+    deaths_any_reported = replace_na(deaths_any_reported, 0L),
+    hospitalized_n = replace_na(hospitalized_n, 0L),
+    occupational_n = replace_na(occupational_n, 0L),
+    agricultural_n = replace_na(agricultural_n, 0L),
+    male_n = replace_na(male_n, 0L),
+    female_n = replace_na(female_n, 0L),
+    
+    incidence_100k = rate_per_100k(cases, population),
+    mortality_intoxication_100k = rate_per_100k(deaths_intoxication, population),
+    mortality_any_reported_100k = rate_per_100k(deaths_any_reported, population),
+    
+    hospitalized_percent = if_else(cases > 0, hospitalized_n / cases * 100, NA_real_),
+    occupational_percent = if_else(cases > 0, occupational_n / cases * 100, NA_real_),
+    agricultural_percent = if_else(cases > 0, agricultural_n / cases * 100, NA_real_),
+    male_percent = if_else(cases > 0, male_n / cases * 100, NA_real_),
+    female_percent = if_else(cases > 0, female_n / cases * 100, NA_real_)
+
+)
+
+```
+
+12. Quartile Summary 
+```{r}
+incidence_quartiles <- quantile_summary(
+  data = analysis_df,
+  variable = incidence_100k,
+  groups = 4,
+  group_label = "Q"
+)
+
+incidence_quartiles
+```
+
+13. Quartile summary by year 
+```{r}
+incidence_quartiles_by_year <- quartile_summary_by_year(
+  data = analysis_df,
+  variable = incidence_100k,
+  year_var = ano,
+  groups = 4,
+  group_label = "Q"
+)
+
+
+
+incidence_quartiles_by_year
+
+```
+
+14. Add Quartile labels to analysis data frame
+```{r}
+analysis_df <- analysis_df %>%
+  mutate(
+    incidence_quartile_num = ntile(incidence_100k, 4),
+    incidence_quartile = paste0("Q", incidence_quartile_num),
+    incidence_quartile = factor(
+      incidence_quartile,
+      levels = c("Q1", "Q2", "Q3", "Q4")
+    )
+  )
+
+```
+
+15. Annual Summary 
+```{r}
+annual_summary <- analysis_df %>%
+  group_by(ano) %>%
+  summarise(
+    total_population = sum(population, na.rm = TRUE),
+    total_cases = sum(cases, na.rm = TRUE),
+    total_deaths_intoxication = sum(deaths_intoxication, na.rm = TRUE),
+    total_deaths_any_reported = sum(deaths_any_reported, na.rm = TRUE),
+    total_hospitalized = sum(hospitalized_n, na.rm = TRUE),
+    total_occupational = sum(occupational_n, na.rm = TRUE),
+    total_agricultural = sum(agricultural_n, na.rm = TRUE),
+    
+    incidence_100k = total_cases / total_population * 100000,
+    mortality_intoxication_100k = total_deaths_intoxication / total_population * 100000,
+    
+    hospitalized_percent = total_hospitalized / total_cases * 100,
+    occupational_percent = total_occupational / total_cases * 100,
+    agricultural_percent = total_agricultural / total_cases * 100,
+    
+    .groups = "drop"
+  )
+
+
+```
+
+16. Set Plot theme
+
+```{r} 
+theme_set(
+  theme_minimal(base_size = 13) +
+    theme(
+      plot.title = element_text(face = "bold"),
+      panel.grid.minor = element_blank()
+    )
+)
+
+```
+
+
+17. Plot 1: Missingness in pesticide variables
+
+```{r}
+p_missing_pesticide <- pesticide_missingness %>%
+  mutate(
+    variable = fct_reorder(variable, missing_percent)
+  ) %>%
+  ggplot(aes(x = variable, y = missing_percent)) +
+  geom_col(fill = "#2F65A7") +
+  coord_flip() +
+  labs(
+    title = "Missingness in pesticide notification variables",
+    x = NULL,
+    y = "Missing values (%)"
+  ) +
+  scale_y_continuous(labels = label_percent(scale = 1))
+
+ggsave(
+  filename = file.path(output_dir, "plot_missingness_pesticide.png"),
+  plot = p_missing_pesticide,
+  width = 9,
+  height = 6,
+  dpi = 300
+)
+
+p_missing_pesticide
+
+```
+
+18. Plot 2: Annual pesticide notification counts
+
+```{r}
+p_annual_cases <- annual_summary %>%
+  ggplot(aes(x = ano, y = total_cases)) +
+  geom_line(color = "#2F65A7", linewidth = 1.1) +
+  geom_point(color = "#2F65A7", size = 2.5) +
+  labs(
+    title = "Annual pesticide intoxication notifications",
+    x = "Year",
+    y = "Number of notifications"
+  ) +
+  scale_y_continuous(labels = comma)
+
+ggsave(
+  filename = file.path(output_dir, "plot_annual_cases.png"),
+  plot = p_annual_cases,
+  width = 8,
+  height = 5,
+  dpi = 300
+)
+
+p_annual_cases
+
+
+
+```
+
+19.  Plot 3: Annual incidence per 100,000 population
+
+```{r}
+p_annual_incidence <- annual_summary %>%
+  ggplot(aes(x = ano, y = incidence_100k)) +
+  geom_line(color = "#006B54", linewidth = 1.1) +
+  geom_point(color = "#006B54", size = 2.5) +
+  labs(
+    title = "Annual pesticide notification incidence",
+    subtitle = "Cases per 100,000 population",
+    x = "Year",
+    y = "Incidence per 100,000"
+  )
+
+ggsave(
+  filename = file.path(output_dir, "plot_annual_incidence.png"),
+  plot = p_annual_incidence,
+  width = 8,
+  height = 5,
+  dpi = 300
+)
+
+p_annual_incidence
+
+
+```
+
+
+20. Plot 4: Incidence distribution by quartile
+```{r}
+p_quartile_boxplot <- analysis_df %>%
+  filter(
+    !is.na(incidence_100k),
+    !is.na(incidence_quartile)
+  ) %>%
+  ggplot(aes(x = incidence_quartile, y = incidence_100k, fill = incidence_quartile)) +
+  geom_boxplot(alpha = 0.8, outlier.alpha = 0.3, show.legend = FALSE) +
+  labs(
+    title = "Incidence distribution by quartile",
+    x = "Incidence quartile",
+    y = "Incidence per 100,000"
+  ) +
+  scale_fill_brewer(palette = "Blues")
+
+ggsave(
+  filename = file.path(output_dir, "plot_quartile_boxplot.png"),
+  plot = p_quartile_boxplot,
+  width = 7,
+  height = 5,
+  dpi = 300
+)
+
+p_quartile_boxplot
+
+
+```
+
+
+21 . Plot 5: Median incidence by quartile over time
+
+```{r}
+quartile_year_plot_data <- analysis_df %>%
+  filter(
+    !is.na(incidence_100k),
+    !is.na(incidence_quartile)
+  ) %>%
+  group_by(ano, incidence_quartile) %>%
+  summarise(
+    median_incidence_100k = median(incidence_100k, na.rm = TRUE),
+    .groups = "drop"
+  )
+
+p_quartile_time <- quartile_year_plot_data %>%
+  ggplot(
+    aes(
+      x = ano,
+      y = median_incidence_100k,
+      color = incidence_quartile,
+      group = incidence_quartile
+    )
+  ) +
+  geom_line(linewidth = 1.1) +
+  geom_point(size = 2) +
+  labs(
+    title = "Median municipality incidence by quartile over time",
+    x = "Year",
+    y = "Median incidence per 100,000",
+    color = "Quartile"
+  ) +
+  scale_color_brewer(palette = "Blues")
+
+ggsave(
+  filename = file.path(output_dir, "plot_quartile_time.png"),
+  plot = p_quartile_time,
+  width = 8,
+  height = 5,
+  dpi = 300
+)
+
+p_quartile_time
+
+```
+
+---------------------------------------
+R Code for 0-14 Pesticide notifications 
+---------------------------------------
+1.Function for age analysis 
+```{r}
+rate_per_100k <- function(numerator, denominator) {
+  if_else(
+    !is.na(denominator) & denominator > 0,
+    numerator / denominator * 100000,
+    NA_real_
+  )
+}
+
+age_group_0_14 <- function(age) {
+  case_when(
+    age >= 0  & age <= 3  ~ "0–3",
+    age >= 4  & age <= 7  ~ "4–7",
+    age >= 8  & age <= 10 ~ "8–10",
+    age >= 11 & age <= 14 ~ "11–14",
+    TRUE ~ NA_character_
+  )
+}
+
+# Optional output folder
+output_dir <- "outputs"
+
+if (!dir.exists(output_dir)) {
+  dir.create(output_dir, recursive = TRUE)
+}
+
+```
+
+2. Clean pesticide notification data for children 0–14
+```{r}
+pesticide_child <- pesticide_raw %>%
+  mutate(
+    ID_MN_RESI = str_pad(as.character(ID_MN_RESI), width = 6, pad = "0"),
+    ano_origem = as.integer(ano_origem),
+    ANO_NASC = suppressWarnings(as.integer(ANO_NASC)),
+    
+    CS_SEXO = as.character(CS_SEXO),
+    EVOLUCAO = as.character(EVOLUCAO),
+    HOSPITAL = as.character(HOSPITAL),
+    CIRCUNSTAN = as.character(CIRCUNSTAN),
+    LAVOURA = as.character(LAVOURA),
+    
+    # Approximate age using notification/reference year minus birth year
+    idade = ano_origem - ANO_NASC,
+    
+    idade = if_else(idade < 0 | idade > 120, NA_integer_, idade),
+    
+    age_group = age_group_0_14(idade),
+    
+    sex_label = case_when(
+      CS_SEXO == "M" ~ "Masculino",
+      CS_SEXO == "F" ~ "Feminino",
+      TRUE ~ NA_character_
+    ),
+    
+    hospitalized = HOSPITAL == "1",
+    occupational = CIRCUNSTAN == "02",
+    agricultural = !is.na(LAVOURA) & trimws(LAVOURA) != "",
+    
+    death_intoxication = EVOLUCAO == "2",
+    death_any_reported = EVOLUCAO %in% c("2", "3")
+  ) %>%
+  filter(
+    !is.na(idade),
+    idade >= 0,
+    idade <= 14,
+    !is.na(age_group),
+    !is.na(sex_label)
+  ) %>%
+  mutate(
+    age_group = factor(
+      age_group,
+      levels = c("0–3", "4–7", "8–10", "11–14")
+    ),
+    sex_label = factor(
+      sex_label,
+      levels = c("Masculino", "Feminino")
+    )
+  )
+
+
+```
+
+3. Clean population data for children 0–14
+
+```{r}
+population_child <- population_raw %>%
+  mutate(
+    cod_ibge = str_pad(as.character(cod_ibge), width = 6, pad = "0"),
+    ano = as.integer(ano),
+    idade = as.integer(idade),
+    populacao = as.numeric(populacao),
+    sexo = as.character(sexo),
+    
+    sex_label = case_when(
+      sexo %in% c("Masculino", "M", "Male") ~ "Masculino",
+      sexo %in% c("Feminino", "F", "Female") ~ "Feminino",
+      TRUE ~ NA_character_
+    ),
+    
+    age_group = age_group_0_14(idade)
+  ) %>%
+  filter(
+    !is.na(idade),
+    idade >= 0,
+    idade <= 14,
+    !is.na(age_group),
+    !is.na(sex_label)
+  ) %>%
+  mutate(
+    age_group = factor(
+      age_group,
+      levels = c("0–3", "4–7", "8–10", "11–14")
+    ),
+    sex_label = factor(
+      sex_label,
+      levels = c("Masculino", "Feminino")
+    )
+  )
+
+
+
+``` 
+
+4. Aggregate pesticide cases by municipality, year, age group, and sex
+
+```{r}
+pesticide_child_muni_year_age_sex <- pesticide_child %>%
+  group_by(ID_MN_RESI, ano_origem, age_group, sex_label) %>%
+  summarise(
+    cases = n(),
+    deaths_intoxication = sum(death_intoxication, na.rm = TRUE),
+    deaths_any_reported = sum(death_any_reported, na.rm = TRUE),
+    hospitalized_n = sum(hospitalized, na.rm = TRUE),
+    occupational_n = sum(occupational, na.rm = TRUE),
+    agricultural_n = sum(agricultural, na.rm = TRUE),
+    median_age_cases = median(idade, na.rm = TRUE),
+    .groups = "drop"
+  )
+
+```
+
+
+5. Aggregate population by municipality, year, age group, and sex
+
+```{r}
+population_child_muni_year_age_sex <- population_child %>%
+  group_by(cod_ibge, ano, age_group, sex_label) %>%
+  summarise(
+    population = sum(populacao, na.rm = TRUE),
+    .groups = "drop"
+  )
+```
+
+6. Join cases and population
+
+```{r}
+analysis_child_age_sex <- population_child_muni_year_age_sex %>%
+  left_join(
+    pesticide_child_muni_year_age_sex,
+    by = c(
+      "cod_ibge" = "ID_MN_RESI",
+      "ano" = "ano_origem",
+      "age_group" = "age_group",
+      "sex_label" = "sex_label"
+    )
+  ) %>%
+  mutate(
+    cases = replace_na(cases, 0L),
+    deaths_intoxication = replace_na(deaths_intoxication, 0L),
+    deaths_any_reported = replace_na(deaths_any_reported, 0L),
+    hospitalized_n = replace_na(hospitalized_n, 0L),
+    occupational_n = replace_na(occupational_n, 0L),
+    agricultural_n = replace_na(agricultural_n, 0L),
+    
+    incidence_100k = rate_per_100k(cases, population),
+    mortality_intoxication_100k = rate_per_100k(deaths_intoxication, population),
+    
+    hospitalized_percent = if_else(cases > 0, hospitalized_n / cases * 100, NA_real_),
+    occupational_percent = if_else(cases > 0, occupational_n / cases * 100, NA_real_),
+    agricultural_percent = if_else(cases > 0, agricultural_n / cases * 100, NA_real_)
+  )
+
+```
+
+
+7.Overall summary by year, age group, and sex
+
+```{r}
+annual_child_age_sex <- analysis_child_age_sex %>%
+  group_by(ano, age_group, sex_label) %>%
+  summarise(
+    total_population = sum(population, na.rm = TRUE),
+    total_cases = sum(cases, na.rm = TRUE),
+    total_deaths_intoxication = sum(deaths_intoxication, na.rm = TRUE),
+    total_hospitalized = sum(hospitalized_n, na.rm = TRUE),
+    total_occupational = sum(occupational_n, na.rm = TRUE),
+    total_agricultural = sum(agricultural_n, na.rm = TRUE),
+    
+    incidence_100k = rate_per_100k(total_cases, total_population),
+    mortality_intoxication_100k = rate_per_100k(total_deaths_intoxication, total_population),
+    
+    hospitalized_percent = if_else(total_cases > 0, total_hospitalized / total_cases * 100, NA_real_),
+    occupational_percent = if_else(total_cases > 0, total_occupational / total_cases * 100, NA_real_),
+    agricultural_percent = if_else(total_cases > 0, total_agricultural / total_cases * 100, NA_real_),
+    
+    .groups = "drop"
+  )
+annual_child_age_sex
+
+```
+
+8.Overall summary by age group and sex
+
+```{r}
+summary_child_age_sex <- analysis_child_age_sex %>%
+  group_by(age_group, sex_label) %>%
+  summarise(
+    total_population = sum(population, na.rm = TRUE),
+    total_cases = sum(cases, na.rm = TRUE),
+    total_deaths_intoxication = sum(deaths_intoxication, na.rm = TRUE),
+    total_hospitalized = sum(hospitalized_n, na.rm = TRUE),
+    total_occupational = sum(occupational_n, na.rm = TRUE),
+    total_agricultural = sum(agricultural_n, na.rm = TRUE),
+    
+    incidence_100k = rate_per_100k(total_cases, total_population),
+    mortality_intoxication_100k = rate_per_100k(total_deaths_intoxication, total_population),
+    
+    hospitalized_percent = if_else(total_cases > 0, total_hospitalized / total_cases * 100, NA_real_),
+    occupational_percent = if_else(total_cases > 0, total_occupational / total_cases * 100, NA_real_),
+    agricultural_percent = if_else(total_cases > 0, total_agricultural / total_cases * 100, NA_real_),
+    
+    .groups = "drop"
+  )
+
+summary_child_age_sex
+
+
+```
+
+9. Quartiles within age group and sex
+This divides municipality-year observations into incidence quartiles separately within each age group and sex. eg: boys aged 0–3 get their own Q1–Q4, girls aged 0–3 get their own Q1–Q4, and so on.
+
+```{r}
+analysis_child_age_sex <- analysis_child_age_sex %>%
+  group_by(age_group, sex_label) %>%
+  mutate(
+    incidence_quartile_num = if_else(
+      !is.na(incidence_100k),
+      ntile(incidence_100k, 4),
+      NA_integer_
+    ),
+    incidence_quartile = paste0("Q", incidence_quartile_num),
+    incidence_quartile = factor(
+      incidence_quartile,
+      levels = c("Q1", "Q2", "Q3", "Q4")
+    )
+  ) %>%
+  ungroup()
+
+```
+
+10. Quartiles Summary Table 
+
+```{r}
+quartile_child_age_sex <- analysis_child_age_sex %>%
+  group_by(age_group, sex_label) %>%
+  mutate(
+    total_n = n(),
+    missing_n = sum(is.na(incidence_100k)),
+    missing_percent = missing_n / total_n * 100
+  ) %>%
+  filter(!is.na(incidence_100k)) %>%
+  group_by(age_group, sex_label, incidence_quartile) %>%
+  summarise(
+    n = n(),
+    percent = n / sum(n) * 100,
+    median_incidence_100k = median(incidence_100k, na.rm = TRUE),
+    min_incidence_100k = min(incidence_100k, na.rm = TRUE),
+    max_incidence_100k = max(incidence_100k, na.rm = TRUE),
+    range = paste0(
+      round(min_incidence_100k, 2),
+      "–",
+      round(max_incidence_100k, 2)
+    ),
+    missing_n = first(missing_n),
+    missing_percent = first(missing_percent),
+    .groups = "drop"
+  ) %>%
+  mutate(
+    percent = round(percent, 2),
+    median_incidence_100k = round(median_incidence_100k, 2),
+    min_incidence_100k = round(min_incidence_100k, 2),
+    max_incidence_100k = round(max_incidence_100k, 2),
+    missing_percent = round(missing_percent, 2)
+  )
+quartile_child_age_sex
+```
+
+11. Quartile counts by age group and sex
+
+```{r}
+p_quartile_counts_pct <- analysis_child_age_sex %>%
+  filter(!is.na(incidence_quartile)) %>%
+  count(age_group, sex_label, incidence_quartile, name = "n") %>%
+  group_by(age_group, sex_label) %>%
+  mutate(
+    percent = n / sum(n) * 100,
+    label = paste0(comma(n), "\n(", round(percent, 1), "%)")
+  ) %>%
+  ungroup() %>%
+  ggplot(
+    aes(
+      x = incidence_quartile,
+      y = n,
+      fill = incidence_quartile
+    )
+  ) +
+  geom_col(show.legend = FALSE) +
+  geom_text(
+    aes(label = label),
+    vjust = -0.25,
+    size = 3.1
+  ) +
+  facet_grid(sex_label ~ age_group) +
+  labs(
+    title = "Municipality-year counts by pesticide incidence quartile",
+    subtitle = "Counts and percentages within each age group and sex",
+    x = "Incidence quartile",
+    y = "Number of municipality-years"
+  ) +
+  scale_y_continuous(
+    labels = comma,
+    expand = expansion(mult = c(0, 0.18))
+  ) +
+  theme_minimal(base_size = 13)
+
+p_quartile_counts_pct
+
+```
+
+12. Median incidence by quartile, age group, and sex - shows quartile plots because it shows how incidence increases from Q1 to Q4.
+
+```{r}
+p_median_incidence_quartile <- analysis_child_age_sex %>%
+  filter(
+    !is.na(incidence_100k),
+    !is.na(incidence_quartile)
+  ) %>%
+  group_by(age_group, sex_label, incidence_quartile) %>%
+  summarise(
+    median_incidence_100k = median(incidence_100k, na.rm = TRUE),
+    .groups = "drop"
+  ) %>%
+  ggplot(
+    aes(
+      x = incidence_quartile,
+      y = median_incidence_100k,
+      fill = incidence_quartile
+    )
+  ) +
+  geom_col(show.legend = FALSE) +
+  geom_text(
+    aes(label = round(median_incidence_100k, 2)),
+    vjust = -0.25,
+    size = 3.1
+  ) +
+  facet_grid(sex_label ~ age_group) +
+  labs(
+    title = "Median pesticide incidence by quartile",
+    subtitle = "Median incidence per 100,000 within each age group and sex",
+    x = "Incidence quartile",
+    y = "Median incidence per 100,000"
+  ) +
+  scale_y_continuous(
+    labels = comma,
+    expand = expansion(mult = c(0, 0.18))
+  ) +
+  theme_minimal(base_size = 13)
+
+p_median_incidence_quartile
+
+```
+
+
+13. Total pesticide notifications by incidence quartile
+
+```{r}
+p_cases_by_quartile <- analysis_child_age_sex %>%
+  filter(!is.na(incidence_quartile)) %>%
+  group_by(age_group, sex_label, incidence_quartile) %>%
+  summarise(
+    total_cases = sum(cases, na.rm = TRUE),
+    .groups = "drop"
+  ) %>%
+  group_by(age_group, sex_label) %>%
+  mutate(
+    percent_cases = total_cases / sum(total_cases) * 100,
+    label = paste0(
+      comma(total_cases),
+      "\n(",
+      round(percent_cases, 1),
+      "%)"
+    )
+  ) %>%
+  ungroup() %>%
+  ggplot(
+    aes(
+      x = incidence_quartile,
+      y = total_cases,
+      fill = incidence_quartile
+    )
+  ) +
+  geom_col(show.legend = FALSE) +
+  geom_text(
+    aes(label = label),
+    vjust = -0.25,
+    size = 3.1
+  ) +
+  facet_grid(sex_label ~ age_group) +
+  labs(
+    title = "Total pesticide notifications by incidence quartile",
+    subtitle = "Counts and percentages of cases within each age group and sex",
+    x = "Incidence quartile",
+    y = "Total notifications"
+  ) +
+  scale_y_continuous(
+    labels = comma,
+    expand = expansion(mult = c(0, 0.18))
+  ) +
+  theme_minimal(base_size = 13)
+
+p_cases_by_quartile
+
+
+
+```
+14. Annual incidence by age group and sex
+
+```{r}
+p_annual_child_incidence <- annual_child_age_sex %>%
+  ggplot(
+    aes(
+      x = ano,
+      y = incidence_100k,
+      color = age_group,
+      group = age_group
+    )
+  ) +
+  geom_line(linewidth = 1.1) +
+  geom_point(size = 2) +
+  facet_wrap(~ sex_label) +
+  labs(
+    title = "Annual pesticide notification incidence among children aged 0–14",
+    subtitle = "By age group and sex",
+    x = "Year",
+    y = "Incidence per 100,000",
+    color = "Age group"
+  ) +
+  theme_minimal(base_size = 13)
+
+ggsave(
+  filename = file.path(output_dir, "plot_annual_child_incidence_age_sex.png"),
+  plot = p_annual_child_incidence,
+  width = 9,
+  height = 5.5,
+  dpi = 300
+)
+
+p_annual_child_incidence
+
+```
+
