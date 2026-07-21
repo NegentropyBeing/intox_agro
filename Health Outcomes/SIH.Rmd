@@ -295,11 +295,11 @@ breaks_cfr <- poisoning %>%
 poisoning <- poisoning %>%
   mutate(
     taxa_letalidade_hosp_0_14_q = case_when(
-      taxa_sih_cfr == 0 ~ "0",
+      taxa_letalidade_hosp_0_14 == 0 ~ "0",
       TRUE ~ as.character(
         cut(
           taxa_letalidade_hosp_0_14,
-          breaks = breaks,
+          breaks = breaks_cfr,
           include.lowest = TRUE,
           labels = c("1", "2", "3", "4")))))
 ```
@@ -368,9 +368,10 @@ ggplot(fatality_summary,
 ## Normality
 
 ```{r}
-ggplot(poisoning, aes(x = sih_cfr)) +
+ggplot(poisoning, aes(x = taxa_letalidade_hosp_0_14)) +
   geom_histogram(bins = 30) +
   theme_minimal()
+
 ```
 
 ## Raw Death Count
@@ -635,7 +636,7 @@ ggplot(SIH_0_14,
 ### Race
 
 ```{r}
-#Aggregate lot
+#Aggregate Plot
 ggplot(SIH_0_14, aes(x = RACA_COR, fill = RACA_COR)) +
   geom_bar(aes(y = after_stat(count / sum(count)))) +
   geom_text(
