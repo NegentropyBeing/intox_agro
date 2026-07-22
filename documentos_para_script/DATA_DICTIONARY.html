@@ -1021,7 +1021,13 @@ age-filtering warning below</td>
 <tr class="odd">
 <td><code>RACA_COR</code></td>
 <td>string</td>
-<td>Race/ethnicity (coded)</td>
+<td>Race/color, coded per Portaria SAS nº 719/2007: <code>01</code>
+Branca, <code>02</code> Preta, <code>03</code> Parda, <code>04</code>
+Amarela, <code>05</code> Indígena, <code>99</code> Sem informação.
+<strong>Note:</strong> codes <code>03</code>/<code>04</code>
+(Parda/Amarela) are swapped relative to SINAN’s <code>CS_RACA</code> —
+do not reuse one mapping for the other. See
+<code>documentos_para_script/Boletim_Raca_Cor.pdf</code></td>
 </tr>
 <tr class="even">
 <td><code>DIAG_PRINC</code></td>
@@ -1207,7 +1213,12 @@ code). Use for municipality-level analysis</td>
 <tr class="odd">
 <td><code>CS_RACA</code></td>
 <td>string</td>
-<td>Race/ethnicity (coded 1–5)</td>
+<td>Race/color (national DATASUS coding): <code>1</code> Branca,
+<code>2</code> Preta, <code>3</code> Amarela, <code>4</code> Parda,
+<code>5</code> Indígena, <code>9</code> Ignorado. <strong>Note:</strong>
+codes <code>3</code>/<code>4</code> (Amarela/Parda) are swapped relative
+to SIH’s <code>RACA_COR</code> — do not reuse one mapping for the
+other</td>
 </tr>
 <tr class="even">
 <td><code>AGENTE_TOX</code></td>
@@ -1227,8 +1238,18 @@ values indicate agricultural context</td>
 <tr class="even">
 <td><code>CIRCUNSTAN</code></td>
 <td>string</td>
-<td>Circumstance of exposure (coded; <code>02</code> = occupational
-accident)</td>
+<td>Circumstance of exposure (2-char code): <code>01</code> Uso
+habitual, <code>02</code> Acidental, <code>03</code> Ambiental,
+<code>04</code> Uso terapêutico, <code>05</code> Prescrição médica
+inadequada, <code>06</code> Erro de administração, <code>07</code>
+Automedicação, <code>08</code> Abuso, <code>09</code> Ingestão de
+alimento ou bebida, <code>10</code> Tentativa de suicídio,
+<code>11</code> Tentativa de aborto, <code>12</code>
+Violência/homicídio, <code>13</code> Outra, <code>99</code> Ignorado.
+<strong>Note:</strong> <code>02</code> is “accidental” in general —
+whether it was an <em>occupational</em> accident is a separate yes/no
+field (<code>st_acidente_trabalho</code>). See
+<code>documentos_para_script/DIC_DADOS_NET - Intoxicacao Exogena.pdf</code></td>
 </tr>
 <tr class="odd">
 <td><code>EVOLUCAO</code></td>

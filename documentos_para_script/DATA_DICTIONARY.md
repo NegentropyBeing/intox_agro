@@ -173,7 +173,7 @@ All sources below are joined here. Variable groups can be included or excluded v
 | `COD_IDADE` | string | Age unit, stored **decoded** (not as the raw DATASUS digit): `"Anos"` (75,654), `"Meses"` (800), `"Dias"` (67), `"Centena de anos (100 + idade)"` (6). There is no `"Horas"` value in this file |
 | `IDADE` | string | Patient age in the units given by `COD_IDADE`. **Stored as a string, not zero-padded** (`"0"`, `"1"`, … `"9"`, `"10"`, …) — see the age-filtering warning below |
 | `SEXO` | string | Sex: `1`=male, `3`=female, `0`=NA |
-| `RACA_COR` | string | Race/ethnicity (coded) |
+| `RACA_COR` | string | Race/color, coded per Portaria SAS nº 719/2007: `01` Branca, `02` Preta, `03` Parda, `04` Amarela, `05` Indígena, `99` Sem informação. **Note:** codes `03`/`04` (Parda/Amarela) are swapped relative to SINAN's `CS_RACA` — do not reuse one mapping for the other. See `documentos_para_script/Boletim_Raca_Cor.pdf` |
 | `DIAG_PRINC` | string | Primary diagnosis (ICD-10, **no dot, 4 chars** — see Appendix A). Carries the **T** code (nature of the substance), e.g. `"T600"` |
 | `DIAG_SECUN` | string | Secondary diagnosis (ICD-10, **no dot, 4 chars**). Where the **X/Y external-cause** code normally lives, e.g. `"X689"`. `"0000"` = not filled (69,976 records) |
 | `CID_ASSO` | string | Associated diagnosis (ICD-10, **no dot, 4 chars**) |
@@ -246,10 +246,10 @@ Key analytical variables:
 | `DT_SIN_PRI` | date | Date of first symptoms |
 | `ANO_NASC` | string | Patient birth year |
 | `CS_SEXO` | string | Sex: `"M"` = male, `"F"` = female |
-| `CS_RACA` | string | Race/ethnicity (coded 1–5) |
+| `CS_RACA` | string | Race/color (national DATASUS coding): `1` Branca, `2` Preta, `3` Amarela, `4` Parda, `5` Indígena, `9` Ignorado. **Note:** codes `3`/`4` (Amarela/Parda) are swapped relative to SIH's `RACA_COR` — do not reuse one mapping for the other |
 | `AGENTE_TOX` | string | Primary toxic agent category. Pesticide group: `02`=agricultural, `03`=domestic, `04`=public-health, `05`=rodenticide, `06`=veterinary. Blank/`99` in ~6% of rows |
 | `LAVOURA` | string | **Crop associated with exposure** (e.g. `"112.SOJA"`, `"088.MILHO"`). Non-empty values indicate agricultural context |
-| `CIRCUNSTAN` | string | Circumstance of exposure (coded; `02` = occupational accident) |
+| `CIRCUNSTAN` | string | Circumstance of exposure (2-char code): `01` Uso habitual, `02` Acidental, `03` Ambiental, `04` Uso terapêutico, `05` Prescrição médica inadequada, `06` Erro de administração, `07` Automedicação, `08` Abuso, `09` Ingestão de alimento ou bebida, `10` Tentativa de suicídio, `11` Tentativa de aborto, `12` Violência/homicídio, `13` Outra, `99` Ignorado. **Note:** `02` is "accidental" in general — whether it was an *occupational* accident is a separate yes/no field (`st_acidente_trabalho`). See `documentos_para_script/DIC_DADOS_NET - Intoxicacao Exogena.pdf` |
 | `EVOLUCAO` | string | Outcome code: `1`=cure, `2`=**death from notified condition**, `3`=death from other cause, `4`=lost to follow-up, `5`=transfer, `9`=unknown |
 | `SIT_TRAB` | string | Work situation at time of exposure |
 | `HOSPITAL` | string | Hospitalised: `"1"` = yes, `"2"` = no |
