@@ -249,7 +249,7 @@ Key analytical variables:
 | `CS_RACA` | string | Race/color (national DATASUS coding): `1` Branca, `2` Preta, `3` Amarela, `4` Parda, `5` Indígena, `9` Ignorado. **Note:** codes `3`/`4` (Amarela/Parda) are swapped relative to SIH's `RACA_COR` — do not reuse one mapping for the other |
 | `AGENTE_TOX` | string | Primary toxic agent category. Pesticide group: `02`=agricultural, `03`=domestic, `04`=public-health, `05`=rodenticide, `06`=veterinary. Blank/`99` in ~6% of rows |
 | `LAVOURA` | string | **Crop associated with exposure** (e.g. `"112.SOJA"`, `"088.MILHO"`). Non-empty values indicate agricultural context |
-| `CIRCUNSTAN` | string | Circumstance of exposure (coded; `02` = occupational accident) |
+| `CIRCUNSTAN` | string | Circumstance of exposure (2-char code): `01` Uso habitual, `02` Acidental, `03` Ambiental, `04` Uso terapêutico, `05` Prescrição médica inadequada, `06` Erro de administração, `07` Automedicação, `08` Abuso, `09` Ingestão de alimento ou bebida, `10` Tentativa de suicídio, `11` Tentativa de aborto, `12` Violência/homicídio, `13` Outra, `99` Ignorado. **Note:** `02` is "accidental" in general — whether it was an *occupational* accident is a separate yes/no field (`st_acidente_trabalho`). See `documentos_para_script/DIC_DADOS_NET - Intoxicacao Exogena.pdf` |
 | `EVOLUCAO` | string | Outcome code: `1`=cure, `2`=**death from notified condition**, `3`=death from other cause, `4`=lost to follow-up, `5`=transfer, `9`=unknown |
 | `SIT_TRAB` | string | Work situation at time of exposure |
 | `HOSPITAL` | string | Hospitalised: `"1"` = yes, `"2"` = no |
