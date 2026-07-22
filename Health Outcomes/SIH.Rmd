@@ -23,6 +23,10 @@ library(kableExtra)
 library(stringr)
 library(gt)
 library(scales)
+library(gtsummary)
+library(flextable)
+library(writexl)
+
 ```
 
 ## Using Consolidated for Analyses
@@ -56,7 +60,7 @@ plot_missing(poisoning)
 
 ```
 
-### Raw Frequency
+### Aggregate Rate Frequencies
 
 ```{r}
 median(poisoning$taxa_hosp_0_14_100k)
@@ -67,8 +71,7 @@ mean(poisoning$taxa_hosp_0_14_100k)
 #### Create Quartiles - same cuts across all years
 
 ```{r}
-
-#Calculate quartile breaks using only non-zero values
+#Quartile breaks using only non-zero values, same quartiles each year 
 breaks_hosp <- poisoning %>%
   filter(taxa_hosp_0_14_100k > 0) %>%
   pull(taxa_hosp_0_14_100k) %>%
@@ -90,49 +93,130 @@ poisoning <- poisoning %>%
 ## Table
 
 ```{r}
-
-poisoning_summary <- poisoning %>%
-  select(
-    ano,
-    taxa_hosp_0_14_100k,
-    taxa_hosp_0_14_100k_quartile
-  ) %>%
-  rename(
-    value = taxa_hosp_0_14_100k,
-    Quartile = taxa_hosp_0_14_100k_quartile
-  ) %>%
-  group_by(ano, Quartile) %>%
+# Municipality-level summary
+municipality_summary <- poisoning %>%
+  group_by(cod_ibge) %>%
   summarise(
-    n = n(),
-    Median = median(value, na.rm = TRUE),
-    Min = min(value, na.rm = TRUE),
-    Max = max(value, na.rm = TRUE),
+    quartile = first(taxa_hosp_0_14_100k_quartile),
+    population = mean(pop_total, na.rm = TRUE),
+    .groups = "drop"
+  )
+
+# Population summary by quartile
+population_summary <- municipality_summary %>%
+  group_by(quartile) %>%
+  summarise(
+    `Number of municipalities` = n(),
+    `Median population` = round(median(population, na.rm = TRUE)),
+    `Population range` = paste0(
+      round(min(population, na.rm = TRUE)),
+      "–",
+      round(max(population, na.rm = TRUE))
+    ),
+    .groups = "drop"
+  )
+
+# Hospitalization rate summary by quartile
+rate_summary <- poisoning %>%
+  group_by(taxa_hosp_0_14_100k_quartile) %>%
+  summarise(
+    `Median hospitalization rate` = round(median(taxa_hosp_0_14_100k, na.rm = TRUE), 2),
+    `Hospitalization rate range` = paste0(
+      round(min(taxa_hosp_0_14_100k, na.rm = TRUE), 2),
+      "–",
+      round(max(taxa_hosp_0_14_100k, na.rm = TRUE), 2)
+    ),
     .groups = "drop"
   ) %>%
-  mutate(
-    Range = paste0(Min, "-", Max)
+  rename(quartile = taxa_hosp_0_14_100k_quartile)
+
+# Final table
+hosp_quartile_summary <- population_summary %>%
+  left_join(rate_summary, by = "quartile") %>%
+  rename(Quartile = quartile)
+
+hosp_quartile_summary
+```
+
+```{r}
+#Above table for 2014-2024
+hosp_quartile_summary_years <- poisoning %>%
+  filter(ano %in% c(2014, 2017, 2021, 2024)) %>%
+  group_by(ano, cod_ibge) %>%
+  summarise(
+    quartile = first(taxa_hosp_0_14_100k_quartile),
+    population = first(pop_total),
+    rate = first(taxa_hosp_0_14_100k),
+    .groups = "drop"
   ) %>%
-  select(ano, Quartile, n, Median, Range)
-
-
-poisoning_summary
-
-#kable
-poisoning_summary %>%
-  arrange(ano, Quartile) %>%
-  kable(
-    digits = 2,
-    col.names = c(
-      "Year",
-      "Quartile",
-      "n",
-      "Median Rate",
-      "Range"
+  group_by(ano, quartile) %>%
+  summarise(
+    `Number of municipalities` = n(),
+    `Median population` = round(median(population, na.rm = TRUE)),
+    `Population range` = paste0(
+      round(min(population, na.rm = TRUE)),
+      "–",
+      round(max(population, na.rm = TRUE))
     ),
-    caption = "Hospitalization Rate Quartiles by Year"
+    `Median hospitalization rate` = round(median(rate, na.rm = TRUE), 2),
+    `Hospitalization rate range` = paste0(
+      round(min(rate, na.rm = TRUE), 2),
+      "–",
+      round(max(rate, na.rm = TRUE), 2)
+    ),
+    .groups = "drop"
   ) %>%
-  collapse_rows(columns = 1) %>%
-  kable_styling(full_width = FALSE)
+  arrange(ano, quartile)
+
+hosp_quartile_summary_years
+
+
+```
+
+```{r}
+# #hospitalization over time in quartiles
+# poisoning_summary <- poisoning %>%
+#   select(
+#     ano,
+#     taxa_hosp_0_14_100k,
+#     taxa_hosp_0_14_100k_quartile
+#   ) %>%
+#   rename(
+#     value = taxa_hosp_0_14_100k,
+#     Quartile = taxa_hosp_0_14_100k_quartile
+#   ) %>%
+#   group_by(ano, Quartile) %>%
+#   summarise(
+#     n = n(),
+#     Median = median(value, na.rm = TRUE),
+#     Min = min(value, na.rm = TRUE),
+#     Max = max(value, na.rm = TRUE),
+#     .groups = "drop"
+#   ) %>%
+#   mutate(
+#     Range = paste0(Min, "-", Max)
+#   ) %>%
+#   select(ano, Quartile, n, Median, Range)
+# 
+# 
+# poisoning_summary
+# 
+# #kable
+# poisoning_summary %>%
+#   arrange(ano, Quartile) %>%
+#   kable(
+#     digits = 2,
+#     col.names = c(
+#       "Year",
+#       "Quartile",
+#       "n",
+#       "Median Rate",
+#       "Range"
+#     ),
+#     caption = "Hospitalization Rate Quartiles by Year"
+#   ) %>%
+#   collapse_rows(columns = 1) %>%
+#   kable_styling(full_width = FALSE)
 ```
 
 ## Plot
@@ -146,24 +230,25 @@ hosp_summary <- consolidada %>%
     .groups = "drop"
   )
 
-ggplot(hosp_summary, aes(x = ano, y = total_hosp, group = 1)) +
-  geom_line(linewidth = 1.2, color = "steelblue") +
-  geom_point(size = 3, color = "steelblue") +
-  scale_x_continuous(breaks = unique(hosp_summary$ano)) +
-  labs(
-    x = "Year",
-    y = "Hospitalizations (n)",
-    title = "Hospitalizations among children aged 0–14 years"
+ggplot(hosp_summary,
+       aes(x = ano, y = total_hosp)) +
+  geom_line(linewidth = 1) +
+  geom_point(size = 3) +
+  scale_x_continuous(breaks = 2014:2024) +
+  scale_y_continuous(
+    expand = expansion(mult = c(0.02, 0.08))
   ) +
-  theme_minimal(base_size = 14)
+  labs(
+    x = NULL,
+    y = "Number of hospitalizations"
+  ) +
+  theme(
+    axis.title = element_text(face = "bold"),
+    axis.text = element_text(color = "black"),
+    legend.title = element_text(face = "bold"),
+    legend.position = "right") 
 
-#rate
-hosp_rate_summary <- consolidada %>%
-  group_by(ano) %>%
-  summarise(
-    hosp_rate = sum(taxa_hosp_0_14_100k, na.rm = TRUE),
-    .groups = "drop"
-  )
+#rate plot
 
 ggplot(hosp_rate_summary, aes(x = ano, y = hosp_rate, group = 1)) +
   geom_line(linewidth = 1.2, color = "steelblue") +
@@ -401,11 +486,10 @@ ggplot(death_summary, aes(x = ano, y = total_death, group = 1)) +
 
 ```{r}
 
-for (yr in 2014:2024) {
-  poisoning %>%
-    filter(ano == yr) %>%
-    write_csv(paste0("poisoning_", yr, ".csv"))
-}
+#for (yr in 2014:2024) {
+#  poisoning %>%
+#    filter(ano == yr) %>%
+#    write_csv(paste0("poisoning_", yr, ".csv"))}
 ```
 
 # Using SIH
@@ -438,6 +522,16 @@ SIH_0_14 %>%
 
 ```
 
+## Descriptive Table
+
+```{r}
+SIH_0_14_count <- SIH_0_14 %>%
+  count(MUNIC_RES) %>%
+  mutate(
+    percent = percent(n / sum(n), accuracy = 0.1)
+  )
+```
+
 ## Types of Intoxication
 
 ```{r}
@@ -466,8 +560,12 @@ diag_table %>%
 
 #plot
 ggplot(SIH_0_14, aes(x = DIAG_PRINC)) +
-  geom_bar(fill = "lightskyblue4", color = "black") +
-  theme_classic() +
+  geom_bar(fill = "#2171B5", color = "black") +
+  theme(
+    axis.title = element_text(face = "bold"),
+    axis.text = element_text(color = "black"),
+    legend.title = element_text(face = "bold"),
+    legend.position = "right") +
   xlab("Principal Diagnosis") +
   ylab("Count")
 
@@ -483,14 +581,21 @@ diag_plot <- SIH_0_14 %>%
   ungroup()
 
 ggplot(diag_plot,
-       aes(x = reorder(DIAG_PRINC, Frequency),
-           y = Frequency,
-           fill = DIAG_PRINC)) +
-  geom_col() +
-  coord_flip() +
-  facet_wrap(~ANO_CMPT, scales = "free_y") +
-  theme_classic() +
-  guides(fill = "none")
+       aes(x = factor(ANO_CMPT),
+           y = DIAG_PRINC,
+           size = Frequency)) +
+  geom_point(color = "#2171B5") +
+  scale_size(range = c(3, 10)) +
+  labs(
+    x = "Year",
+    y = "ICD-10 code",
+    size = "Hospitalizations"
+  ) +
+  theme(
+    axis.title = element_text(face = "bold"),
+    axis.text = element_text(color = "black"),
+    legend.title = element_text(face = "bold"),
+    legend.position = "right") 
 ```
 
 #### By Age Group
@@ -513,6 +618,8 @@ SIH_0_14 <- SIH_0_14 %>%
 ```
 
 ```{r}
+#table
+
 #plot
 diag_age <- SIH_0_14 %>%
   count(age_group, DIAG_PRINC)
@@ -520,12 +627,20 @@ diag_age <- SIH_0_14 %>%
 ggplot(diag_age,
        aes(x = age_group, y = n, fill = DIAG_PRINC)) +
   geom_col(position = "fill") +
-  scale_y_continuous(labels = scales::percent) +
-  theme_classic() +
+  scale_fill_brewer(palette = "Dark2")+
+  scale_y_continuous(
+    labels = scales::label_percent(accuracy = 1)
+  )+
+  theme_classic(base_size = 12) +
+  theme(
+    axis.title = element_text(face = "bold"),
+    axis.text = element_text(color = "black"),
+    legend.title = element_text(face = "bold"),
+    legend.position = "right") +
   labs(
     x = "Age group",
-    y = "Percent of hospitalizations",
-    fill = "Principal diagnosis")
+    y = "Hospitalizations (%)",
+    fill = "Principal Diagnosis")
 ```
 
 #### By Sex
@@ -538,12 +653,17 @@ diag_sex <- SIH_0_14 %>%
 ggplot(diag_sex,
        aes(x = SEXO, y = n, fill = DIAG_PRINC)) +
   geom_col(position = "fill") +
+  scale_fill_brewer(palette = "Dark2")+
   scale_y_continuous(labels = scales::percent) +
-  theme_classic() +
+  theme(
+    axis.title = element_text(face = "bold"),
+    axis.text = element_text(color = "black"),
+    legend.title = element_text(face = "bold"),
+    legend.position = "right") +
   labs(
     x = "Sex",
-    y = "Percent of hospitalizations",
-    fill = "Principal diagnosis")
+    y = "Hospitalizations (%)",
+    fill = "Principal Diagnosis")
 ```
 
 #### By Race
@@ -570,11 +690,16 @@ diag_age <- SIH_0_14 %>%
 ggplot(diag_age,
        aes(x = RACA_COR, y = n, fill = DIAG_PRINC)) +
   geom_col(position = "fill") +
+  scale_fill_brewer(palette = "Dark2")+
   scale_y_continuous(labels = scales::percent) +
-  theme_classic() +
+  theme(
+    axis.title = element_text(face = "bold"),
+    axis.text = element_text(color = "black"),
+    legend.title = element_text(face = "bold"),
+    legend.position = "right") +
   labs(
     x = "Race",
-    y = "Percent of hospitalizations",
+    y = "Hospitalizations (%)",
     fill = "Principal diagnosis")
 ```
 
@@ -614,22 +739,32 @@ ggplot(SIH_0_14, aes(x = age_group, fill = age_group)) +
       label = scales::percent(after_stat(count / sum(count)), accuracy = 0.1)
     ),
     vjust = -0.3) +
+  scale_fill_brewer(palette = "Blues")+
   scale_y_continuous(labels = scales::percent) +
-  theme_classic() +
+  theme(
+    axis.title = element_text(face = "bold"),
+    axis.text = element_text(color = "black"),
+    legend.title = element_text(face = "bold"),
+    legend.position = "right") +
   labs(
     x = "Age Group",
-    y = "Percentage of Hospitalizations",
+    y = "Hospitalizations (%)",
     fill = "Age Group")
 
 #Trend Plot
 ggplot(SIH_0_14,
        aes(x = ANO_CMPT, fill = age_group)) +
   geom_bar(position = "fill") +
+  scale_fill_brewer(palette = "Blues")+
   scale_y_continuous(labels = scales::percent) +
-  theme_classic() +
+  theme(
+    axis.title = element_text(face = "bold"),
+    axis.text = element_text(color = "black"),
+    legend.title = element_text(face = "bold"),
+    legend.position = "right") +
   labs(
     x = "Year",
-    y = "Percentage of Hospitalizations",
+    y = "Hospitalizations (%)",
     fill = "Age Group")
 ```
 
@@ -646,10 +781,15 @@ ggplot(SIH_0_14, aes(x = RACA_COR, fill = RACA_COR)) +
       label = scales::percent(after_stat(count / sum(count)), accuracy = 0.1)),
     hjust = -0.2) +
   coord_flip() +
+  scale_fill_brewer(palette = "Dark2")+
   scale_y_continuous(
     labels = scales::percent,
     expand = expansion(mult = c(0, 0.1))) +
-  theme_classic() +
+  theme(
+    axis.title = element_text(face = "bold"),
+    axis.text = element_text(color = "black"),
+    legend.title = element_text(face = "bold"),
+    legend.position = "right") +  
   labs(
     x = "Race",
     y = "Percentage of Hospitalizations",
@@ -694,11 +834,16 @@ ggplot(SIH_0_14, aes(x = SEXO, fill = SEXO)) +
       label = scales::percent(after_stat(count / sum(count)), accuracy = 0.1)
     ),
     vjust = -0.3) +
+  scale_fill_brewer(palette = "Dark2")+
   scale_y_continuous(labels = scales::percent) +
-  theme_classic() +
+  theme(
+    axis.title = element_text(face = "bold"),
+    axis.text = element_text(color = "black"),
+    legend.title = element_text(face = "bold"),
+    legend.position = "right") +
   labs(
     x = "Sex",
-    y = "Percentage of Hospitalizations",
+    y = "Hospitalizations (%)",
     fill = "Sex")
 
 #Trend Plot
@@ -706,10 +851,51 @@ ggplot(SIH_0_14, aes(x = SEXO, fill = SEXO)) +
 ggplot(SIH_0_14,
        aes(x = ANO_CMPT, fill = SEXO)) +
   geom_bar(position = "fill") +
+  scale_fill_brewer(palette = "Dark2")+
   scale_y_continuous(labels = scales::percent) +
-  theme_classic() +
+  theme(
+    axis.title = element_text(face = "bold"),
+    axis.text = element_text(color = "black"),
+    legend.title = element_text(face = "bold"),
+    legend.position = "right") +
   labs(
     x = "Year",
-    y = "Percentage of Hospitalizations",
+    y = "Hospitalizations (%)",
     fill = "Sex")
+```
+
+## Table 1
+
+```{r}
+library(gtsummary)
+
+table1SIH <- SIH_0_14 %>%
+  select(
+    SEXO,
+    RACA_COR,
+    age_group,
+    DIAG_PRINC
+  ) %>%
+  tbl_summary(
+    label = list(
+      SEXO ~ "Sex",
+      RACA_COR ~ "Race",
+      age_group ~ "Age group",
+      DIAG_PRINC ~ "Primary diagnosis (ICD-10)"
+    ),
+    statistic = list(
+      all_continuous() ~ "{median} ({p25}, {p75})",
+      all_categorical() ~ "{n} ({p}%)"
+    ),
+    digits = all_continuous() ~ 1,
+    missing = "ifany"
+  ) %>%
+  bold_labels()
+
+table1SIH
+
+table1SIH_excel <- as_tibble(table1SIH)
+
+table1SIH_excel
+
 ```
