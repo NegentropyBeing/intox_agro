@@ -80,6 +80,12 @@ sih_agg <- read_parquet("resultados/SIH/sih_iexo_sp_2014_2024.parquet") |>
     sih_n_hosp_0_14        = sum(is_0_14, na.rm = TRUE),
     sih_n_hosp_t60         = sum(substr(DIAG_PRINC, 1, 3) == "T60", na.rm = TRUE),
     sih_n_hosp_pesticida   = sum(is_pesticida, na.rm = TRUE),
+    # Pediatric × pesticide (descriptive report, 2026-07-23). The T60 series is
+    # the temporally consistent definition; the full pesticide flag also counts
+    # cases recovered via DIAG_SECUN/CID_ASSO, fields only populated in 2014
+    # (see METHODS §3) — do not use it for trends.
+    sih_n_hosp_t60_0_14       = sum(is_0_14 & substr(DIAG_PRINC, 1, 3) == "T60", na.rm = TRUE),
+    sih_n_hosp_pesticida_0_14 = sum(is_0_14 & is_pesticida, na.rm = TRUE),
     # T60 subtypes kept separate (issue #7 point 5) for agent-specific analysis.
     # DATASUS stores ICD without the dot: "T600".."T609"; bare "T60" = unspecified.
     sih_n_hosp_t60_0       = sum(DIAG_PRINC == "T600", na.rm = TRUE),  # organophosphate/carbamate insecticides
@@ -114,6 +120,9 @@ sinan_agg <- read_parquet("resultados/SINAN/sinan_iexo_sp_2014_2024.parquet") |>
     # Pesticide-specific (issue #7): primary toxic agent (AGENTE_TOX) in pesticide
     # group. Strict primary-agent match; free-text secondary-agent recovery not applied.
     sinan_n_notif_pesticida         = sum(AGENTE_TOX %in% c("02","03","04","05","06"), na.rm = TRUE),
+    # Pediatric × pesticide (descriptive report, 2026-07-23).
+    sinan_n_notif_pesticida_0_14    = sum(AGENTE_TOX %in% c("02","03","04","05","06") &
+                                            NU_IDADE_N <= 4014, na.rm = TRUE),
     # Agent subtypes kept separate (issue #7 point 5).
     sinan_n_notif_agrotox_agricola  = sum(AGENTE_TOX == "02", na.rm = TRUE),  # agricultural pesticide
     sinan_n_notif_agrotox_domestico = sum(AGENTE_TOX == "03", na.rm = TRUE),  # domestic/garden pesticide
@@ -153,6 +162,10 @@ sim_agg <- sim_raw |>
     sim_n_obitos_0_14 = sum(suppressWarnings(as.integer(IDADEanos)) <= 14, na.rm = TRUE),
     # Pesticide-specific (issue #7): pesticide external-cause codes in CAUSABAS.
     sim_n_obitos_pesticida          = sum(cb3 %in% PEST_EXT_CODES, na.rm = TRUE),
+    # Pediatric × pesticide (descriptive report, 2026-07-23).
+    sim_n_obitos_pesticida_0_14     = sum(cb3 %in% PEST_EXT_CODES &
+                                            suppressWarnings(as.integer(IDADEanos)) <= 14,
+                                          na.rm = TRUE),
     # Death by intent kept separate (issue #7 point 5).
     sim_n_obitos_pest_acidental     = sum(cb3 == "X48", na.rm = TRUE),  # accidental
     sim_n_obitos_pest_autoprovocado = sum(cb3 == "X68", na.rm = TRUE),  # intentional self-poisoning
@@ -344,14 +357,15 @@ base <- spine |>
 # (municipalities with no recorded events are truly zero, not missing)
 count_vars <- c(
   "sih_n_hosp", "sih_n_hosp_0_14", "sih_n_hosp_t60", "sih_n_hosp_pesticida",
+  "sih_n_hosp_t60_0_14", "sih_n_hosp_pesticida_0_14",
   "sih_n_hosp_t60_0", "sih_n_hosp_t60_1", "sih_n_hosp_t60_2", "sih_n_hosp_t60_3",
   "sih_n_hosp_t60_4", "sih_n_hosp_t60_8", "sih_n_hosp_t60_9",
   "sih_n_obitos_hosp", "sih_n_obitos_hosp_0_14",
   "sinan_n_notif", "sinan_n_notif_0_14", "sinan_n_notif_agric", "sinan_n_obitos",
-  "sinan_n_notif_pesticida",
+  "sinan_n_notif_pesticida", "sinan_n_notif_pesticida_0_14",
   "sinan_n_notif_agrotox_agricola", "sinan_n_notif_agrotox_domestico",
   "sinan_n_notif_agrotox_saudepub", "sinan_n_notif_raticida", "sinan_n_notif_prod_veterinario",
-  "sim_n_obitos", "sim_n_obitos_0_14", "sim_n_obitos_pesticida",
+  "sim_n_obitos", "sim_n_obitos_0_14", "sim_n_obitos_pesticida", "sim_n_obitos_pesticida_0_14",
   "sim_n_obitos_pest_acidental", "sim_n_obitos_pest_autoprovocado",
   "sim_n_obitos_pest_agressao", "sim_n_obitos_pest_indeterminado",
   "sisagua_n_amostras", "sisagua_n_amostras_detect", "sisagua_n_pesticidas_detect"
@@ -369,6 +383,19 @@ base <- base |>
     taxa_hosp_0_14_100k       = round(sih_n_hosp_0_14    / pop_0_14 * 100000, 2),
     taxa_notif_0_14_100k      = round(sinan_n_notif_0_14 / pop_0_14 * 100000, 2),
     taxa_obitos_sim_0_14_100k = round(sim_n_obitos_0_14  / pop_0_14 * 100000, 2),
+    # Pesticide-specific rates (descriptive report, 2026-07-23). For SIH trends
+    # use the T60 series: taxa_hosp_pesticida_* includes external-cause codes
+    # recoverable only in 2014 (DIAG_SECUN/CID_ASSO — see METHODS §3), so its
+    # time series is inflated in 2014. Events are sparse: pool years by summing
+    # counts (not averaging rates) before interpreting small-municipality rates.
+    taxa_hosp_t60_100k                  = round(sih_n_hosp_t60            / pop_total * 100000, 2),
+    taxa_hosp_pesticida_100k            = round(sih_n_hosp_pesticida      / pop_total * 100000, 2),
+    taxa_notif_pesticida_100k           = round(sinan_n_notif_pesticida   / pop_total * 100000, 2),
+    taxa_obitos_sim_pesticida_100k      = round(sim_n_obitos_pesticida    / pop_total * 100000, 2),
+    taxa_hosp_t60_0_14_100k             = round(sih_n_hosp_t60_0_14       / pop_0_14  * 100000, 2),
+    taxa_hosp_pesticida_0_14_100k       = round(sih_n_hosp_pesticida_0_14 / pop_0_14  * 100000, 2),
+    taxa_notif_pesticida_0_14_100k      = round(sinan_n_notif_pesticida_0_14 / pop_0_14 * 100000, 2),
+    taxa_obitos_sim_pesticida_0_14_100k = round(sim_n_obitos_pesticida_0_14  / pop_0_14 * 100000, 2),
     # In-hospital case fatality (%): deaths among admissions. NA if no admissions.
     taxa_letalidade_hosp      = ifelse(sih_n_hosp > 0,
                                        round(sih_n_obitos_hosp / sih_n_hosp * 100, 1), NA_real_),
@@ -421,7 +448,12 @@ vars_outcomes_count <- c(
 vars_outcomes_pesticida <- c(
   "sih_n_hosp_pesticida",    # SIH hospitalisations, pesticide-specific (T60 or ext-cause X48/X68/X87/Y18)
   "sinan_n_notif_pesticida", # SINAN notifications, pesticide agents (AGENTE_TOX 02-06)
-  "sim_n_obitos_pesticida"   # SIM deaths, pesticide external causes (X48/X68/X87/Y18)
+  "sim_n_obitos_pesticida",  # SIM deaths, pesticide external causes (X48/X68/X87/Y18)
+  # Pediatric × pesticide (descriptive report, 2026-07-23)
+  "sih_n_hosp_t60_0_14",        # SIH 0-14, T60 only (temporally consistent series)
+  "sih_n_hosp_pesticida_0_14",  # SIH 0-14, full pesticide flag (2014 inflated — not for trends)
+  "sinan_n_notif_pesticida_0_14", # SINAN 0-14, pesticide agents
+  "sim_n_obitos_pesticida_0_14"   # SIM 0-14, pesticide external causes
 )
 
 # Pesticide subtypes kept separate (issue #7 point 5) for agent/intent-specific
@@ -456,7 +488,17 @@ vars_rates <- c(
   "taxa_notif_0_14_100k",      # SINAN notifications per 100,000, ages 0-14
   "taxa_obitos_sim_0_14_100k", # SIM deaths per 100,000, ages 0-14
   "taxa_letalidade_hosp",      # in-hospital case fatality (%), all ages
-  "taxa_letalidade_hosp_0_14"  # in-hospital case fatality (%), ages 0-14
+  "taxa_letalidade_hosp_0_14", # in-hospital case fatality (%), ages 0-14
+  # Pesticide-specific rates (descriptive report, 2026-07-23). For SIH time
+  # trends use the taxa_hosp_t60_* series (see comment at the rate block).
+  "taxa_hosp_t60_100k",                  # SIH pesticide (T60) per 100,000, all ages
+  "taxa_hosp_pesticida_100k",            # SIH pesticide (full flag) per 100,000, all ages
+  "taxa_notif_pesticida_100k",           # SINAN pesticide per 100,000, all ages
+  "taxa_obitos_sim_pesticida_100k",      # SIM pesticide deaths per 100,000, all ages
+  "taxa_hosp_t60_0_14_100k",             # SIH pesticide (T60) per 100,000, ages 0-14
+  "taxa_hosp_pesticida_0_14_100k",       # SIH pesticide (full flag) per 100,000, ages 0-14
+  "taxa_notif_pesticida_0_14_100k",      # SINAN pesticide per 100,000, ages 0-14
+  "taxa_obitos_sim_pesticida_0_14_100k"  # SIM pesticide deaths per 100,000, ages 0-14
 )
 
 vars_sisagua <- c(
