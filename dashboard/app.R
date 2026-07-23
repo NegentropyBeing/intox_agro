@@ -238,7 +238,7 @@ ui <- page_navbar(
         selectizeInput("muni", "Municípios (filtra a página)", multiple = TRUE,
                        choices = sort(unique(base$nome_municipio)),
                        options = list(placeholder = "todos")),
-        helpText("Base município × ano (7.095 linhas, 73 variáveis). Coberturas fixas",
+        helpText("Base município × ano (7.095 linhas, 104 variáveis). Coberturas fixas",
                  "(Censo Agro 2017, IVS 2010, urbano/rural 2022) repetem por ano.")
       ),
       layout_columns(
