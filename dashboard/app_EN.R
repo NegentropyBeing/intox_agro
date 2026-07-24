@@ -240,7 +240,7 @@ ui <- page_navbar(
         selectizeInput("muni", "Municipalities (filters the page)", multiple = TRUE,
                        choices = sort(unique(base$nome_municipio)),
                        options = list(placeholder = "all")),
-        helpText("Municipality × year base (7,095 rows, 73 variables). Fixed covariates",
+        helpText("Municipality × year base (7,095 rows, 104 variables). Fixed covariates",
                  "(Ag Census 2017, IVS 2010, urban/rural 2022) repeat across years.")
       ),
       layout_columns(
