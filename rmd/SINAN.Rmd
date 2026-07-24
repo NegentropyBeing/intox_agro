@@ -303,7 +303,7 @@ pesticide_notifications_plot <- df %>%
     x = "Year of notification",
     y = "Number of notifications"
   )
-
+pesticide_notifications_plot
 ggsave(
   filename = "/Users/abiramisomasundaram/Desktop/Brazil pesticides/Workspace/Plots/SINAN/pesticide_notifications_over_time.jpeg",
   plot = pesticide_notifications_plot,
