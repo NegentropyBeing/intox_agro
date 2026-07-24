@@ -1094,6 +1094,57 @@ a pesticide external-cause code (X48/X68/X87/Y18) appears in
 <code>DIAG_PRINC</code>, <code>DIAG_SECUN</code>, or
 <code>CID_ASSO</code></td>
 </tr>
+<tr class="even">
+<td><code>CAR_INT</code></td>
+<td>string</td>
+<td>Admission type, raw DATASUS code. Observed values <code>01</code>,
+<code>02</code>, <code>03</code>, <code>05</code>, <code>06</code>;
+populated for all records</td>
+</tr>
+<tr class="odd">
+<td><code>COMPLEX</code></td>
+<td>string</td>
+<td>Care complexity, raw DATASUS code. Observed values <code>02</code>,
+<code>03</code>; populated for all records</td>
+</tr>
+<tr class="even">
+<td><code>ETNIA</code></td>
+<td>string</td>
+<td>Indigenous ethnicity, <strong>stored decoded</strong>;
+<code>&quot;0000&quot;</code> when not applicable. Filled in 36 of 76,527
+records</td>
+</tr>
+<tr class="odd">
+<td><code>MARCA_UCI</code></td>
+<td>string</td>
+<td>Intermediate care unit indicator (<code>&quot;00&quot;</code>,
+<code>&quot;01&quot;</code>). Filled in 5 records</td>
+</tr>
+<tr class="even">
+<td><code>CBOR</code></td>
+<td>string</td>
+<td>Occupation, <strong>stored decoded</strong> (CBO job title). Filled
+in <strong>4 records</strong> — not usable for occupational
+analysis</td>
+</tr>
+<tr class="odd">
+<td><code>VINCPREV</code></td>
+<td>string</td>
+<td>Social-security status, <strong>stored decoded</strong>
+(<code>&quot;Empregado&quot;</code>, <code>&quot;Não segurado&quot;</code>). Filled in 4
+records</td>
+</tr>
+<tr class="even">
+<td><code>INSTRU</code></td>
+<td>string</td>
+<td>Education level. <strong>Empty in every record</strong></td>
+</tr>
+<tr class="odd">
+<td><code>CID_NOTIF</code></td>
+<td>string</td>
+<td>Notification ICD-10 code. <strong>Empty in every
+record</strong></td>
+</tr>
 </tbody>
 </table>
 <blockquote>
@@ -1211,12 +1262,20 @@ code). Use for municipality-level analysis</td>
 <td>Patient birth year</td>
 </tr>
 <tr class="even">
+<td><code>NU_IDADE_N</code></td>
+<td>integer</td>
+<td>Age, DATASUS coded: first digit is the unit (<code>1</code> hours,
+<code>2</code> days, <code>3</code> months, <code>4</code> years) and
+the rest is the value, so <code>4014</code> is 14 years. No missing
+values. Filter <code>NU_IDADE_N &lt;= 4014</code> for ages 0–14</td>
+</tr>
+<tr class="odd">
 <td><code>CS_SEXO</code></td>
 <td>string</td>
 <td>Sex: <code>&quot;M&quot;</code> = male, <code>&quot;F&quot;</code> = female,
 <code>&quot;I&quot;</code> = ignored</td>
 </tr>
-<tr class="odd">
+<tr class="even">
 <td><code>CS_RACA</code></td>
 <td>string</td>
 <td>Race/color (national DATASUS coding): <code>1</code> Branca,
@@ -1229,7 +1288,7 @@ excluded) are <code>1</code> 59.8%, <code>2</code> 7.5%, <code>3</code>
 0.6%, <code>4</code> 31.9%, <code>5</code> 0.2%, so the ~32% Parda group
 sits at <code>4</code> here and at <code>03</code> in SIH</td>
 </tr>
-<tr class="even">
+<tr class="odd">
 <td><code>AGENTE_TOX</code></td>
 <td>string</td>
 <td>Primary toxic agent category. Pesticide group:
@@ -1237,14 +1296,14 @@ sits at <code>4</code> here and at <code>03</code> in SIH</td>
 <code>04</code>=public-health, <code>05</code>=rodenticide,
 <code>06</code>=veterinary. Blank/<code>99</code> in ~6% of rows</td>
 </tr>
-<tr class="odd">
+<tr class="even">
 <td><code>LAVOURA</code></td>
 <td>string</td>
 <td><strong>Crop associated with exposure</strong>
 (e.g. <code>&quot;112.SOJA&quot;</code>, <code>&quot;088.MILHO&quot;</code>). Non-empty
 values indicate agricultural context</td>
 </tr>
-<tr class="even">
+<tr class="odd">
 <td><code>CIRCUNSTAN</code></td>
 <td>string</td>
 <td>Circumstance of exposure (2-char code): <code>01</code> Uso
@@ -1260,7 +1319,7 @@ whether it was an <em>occupational</em> accident is a separate yes/no
 field (<code>st_acidente_trabalho</code>). See
 <code>documentos_para_script/DIC_DADOS_NET - Intoxicacao Exogena.pdf</code></td>
 </tr>
-<tr class="odd">
+<tr class="even">
 <td><code>EVOLUCAO</code></td>
 <td>string</td>
 <td>Outcome code: <code>1</code>=cure, <code>2</code>=<strong>death from
@@ -1268,17 +1327,17 @@ notified condition</strong>, <code>3</code>=death from other cause,
 <code>4</code>=lost to follow-up, <code>5</code>=transfer,
 <code>9</code>=unknown</td>
 </tr>
-<tr class="even">
+<tr class="odd">
 <td><code>SIT_TRAB</code></td>
 <td>string</td>
 <td>Work situation at time of exposure</td>
 </tr>
-<tr class="odd">
+<tr class="even">
 <td><code>HOSPITAL</code></td>
 <td>string</td>
 <td>Hospitalised: <code>&quot;1&quot;</code> = yes, <code>&quot;2&quot;</code> = no</td>
 </tr>
-<tr class="even">
+<tr class="odd">
 <td><code>pesticida</code></td>
 <td>logical</td>
 <td><strong>Pesticide-specific flag (issue #7):</strong>
@@ -1492,6 +1551,54 @@ results</td>
 <td><code>TP_ABASTECIMENTO</code></td>
 <td>string</td>
 <td>Water supply type</td>
+</tr>
+<tr class="odd">
+<td><code>RESULTADO</code></td>
+<td>string</td>
+<td><strong>Raw</strong> result as delivered by SISAGUA, with comma
+decimal separator (<code>&quot;,001&quot;</code>) — <code>as.numeric()</code>
+returns <code>NA</code>. Use <code>RESULTADO_NUM</code></td>
+</tr>
+<tr class="even">
+<td><code>UNIDADE</code></td>
+<td>string</td>
+<td>Measurement unit; always <code>&quot;µg/L&quot;</code></td>
+</tr>
+<tr class="odd">
+<td><code>LD</code></td>
+<td>string</td>
+<td>Detection limit, raw string with comma decimal separator;
+<code>NA</code> in 74% of rows</td>
+</tr>
+<tr class="even">
+<td><code>LQ</code></td>
+<td>string</td>
+<td>Quantification limit, raw string with comma decimal separator;
+<code>NA</code> in 12% of rows</td>
+</tr>
+<tr class="odd">
+<td><code>NO_SOLUCAO_ABASTECIMENTO</code></td>
+<td>string</td>
+<td>Name of the water supply system (free text, ~12,000 distinct
+values)</td>
+</tr>
+<tr class="even">
+<td><code>TP_CAPTACAO</code></td>
+<td>string</td>
+<td>Catchment type (<code>&quot;SUPERFICIAL&quot;</code>,
+<code>&quot;SUBTERRANEO&quot;</code>); <code>NA</code> in 81% of rows</td>
+</tr>
+<tr class="odd">
+<td><code>CAT_CAPTACAO_FINAL</code></td>
+<td>string</td>
+<td>Catchment category, 9 values (e.g. <code>&quot;NASCENTE&quot;</code>,
+<code>&quot;lago&quot;</code>, <code>&quot;corrego&quot;</code>); <code>NA</code> in 81% of
+rows</td>
+</tr>
+<tr class="even">
+<td><code>TP_TRIMESTRE</code></td>
+<td>string</td>
+<td>Reporting quarter; <code>NA</code> in 96.5% of rows</td>
 </tr>
 </tbody>
 </table>
@@ -2365,6 +2472,11 @@ Fiocruz</p>
 <td><code>ibp_pct_urban</code></td>
 <td>double</td>
 <td>% census tracts classified as urban</td>
+</tr>
+<tr class="even">
+<td><code>Nome_do_municipio</code></td>
+<td>string</td>
+<td>Municipality name (original CIDACS column name, mixed case)</td>
 </tr>
 </tbody>
 </table>
