@@ -1015,8 +1015,8 @@ age-filtering warning below</td>
 <tr class="even">
 <td><code>SEXO</code></td>
 <td>string</td>
-<td>Sex: <code>1</code>=male, <code>3</code>=female,
-<code>0</code>=NA</td>
+<td>Sex, <strong>stored decoded</strong>, not as DATASUS codes:
+<code>&quot;Masculino&quot;</code>, <code>&quot;Feminino&quot;</code></td>
 </tr>
 <tr class="odd">
 <td><code>RACA_COR</code></td>
@@ -1027,7 +1027,12 @@ Amarela, <code>05</code> Indígena, <code>99</code> Sem informação.
 <strong>Note:</strong> codes <code>03</code>/<code>04</code>
 (Parda/Amarela) are swapped relative to SINAN’s <code>CS_RACA</code> —
 do not reuse one mapping for the other. See
-<code>documentos_para_script/Boletim_Raca_Cor.pdf</code></td>
+<code>documentos_para_script/Boletim_Raca_Cor.pdf</code>. Confirmed
+against the data: code shares in SP 2014–2024 (unknown excluded) are
+<code>01</code> 60.8%, <code>02</code> 5.4%, <code>03</code> 32.6%,
+<code>04</code> 1.1%, <code>05</code> 0.1%, matching the state’s 2022
+census composition (Branca 57.8%, Preta 8.0%, Parda 33.0%, Amarela 1.2%,
+Indígena 0.1%)</td>
 </tr>
 <tr class="even">
 <td><code>DIAG_PRINC</code></td>
@@ -1208,7 +1213,8 @@ code). Use for municipality-level analysis</td>
 <tr class="even">
 <td><code>CS_SEXO</code></td>
 <td>string</td>
-<td>Sex: <code>&quot;M&quot;</code> = male, <code>&quot;F&quot;</code> = female</td>
+<td>Sex: <code>&quot;M&quot;</code> = male, <code>&quot;F&quot;</code> = female,
+<code>&quot;I&quot;</code> = ignored</td>
 </tr>
 <tr class="odd">
 <td><code>CS_RACA</code></td>
@@ -1217,8 +1223,11 @@ code). Use for municipality-level analysis</td>
 <code>2</code> Preta, <code>3</code> Amarela, <code>4</code> Parda,
 <code>5</code> Indígena, <code>9</code> Ignorado. <strong>Note:</strong>
 codes <code>3</code>/<code>4</code> (Amarela/Parda) are swapped relative
-to SIH’s <code>RACA_COR</code> — do not reuse one mapping for the
-other</td>
+to SIH’s <code>RACA_COR</code> — do not reuse one mapping for the other.
+Confirmed against the data: code shares in SP 2014–2024 (unknown
+excluded) are <code>1</code> 59.8%, <code>2</code> 7.5%, <code>3</code>
+0.6%, <code>4</code> 31.9%, <code>5</code> 0.2%, so the ~32% Parda group
+sits at <code>4</code> here and at <code>03</code> in SIH</td>
 </tr>
 <tr class="even">
 <td><code>AGENTE_TOX</code></td>
@@ -1344,7 +1353,8 @@ code)</td>
 <tr class="even">
 <td><code>SEXO</code></td>
 <td>string</td>
-<td>Sex (coded)</td>
+<td>Sex, <strong>stored decoded</strong>: <code>&quot;Masculino&quot;</code>,
+<code>&quot;Feminino&quot;</code></td>
 </tr>
 <tr class="odd">
 <td><code>IDADEanos</code></td>
@@ -1354,7 +1364,10 @@ code)</td>
 <tr class="even">
 <td><code>RACACOR</code></td>
 <td>string</td>
-<td>Race/ethnicity (coded)</td>
+<td>Race/color, <strong>stored decoded</strong>: <code>&quot;Branca&quot;</code>,
+<code>&quot;Preta&quot;</code>, <code>&quot;Parda&quot;</code>, <code>&quot;Amarela&quot;</code>,
+<code>&quot;Indígena&quot;</code> — no code mapping needed here, unlike SIH and
+SINAN</td>
 </tr>
 <tr class="odd">
 <td><code>ESC2010</code></td>
