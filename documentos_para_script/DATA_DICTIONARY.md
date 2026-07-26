@@ -172,8 +172,8 @@ All sources below are joined here. Variable groups can be included or excluded v
 | `NASC` | string | Patient date of birth |
 | `COD_IDADE` | string | Age unit, stored **decoded** (not as the raw DATASUS digit): `"Anos"` (75,654), `"Meses"` (800), `"Dias"` (67), `"Centena de anos (100 + idade)"` (6). There is no `"Horas"` value in this file |
 | `IDADE` | string | Patient age in the units given by `COD_IDADE`. **Stored as a string, not zero-padded** (`"0"`, `"1"`, … `"9"`, `"10"`, …) — see the age-filtering warning below |
-| `SEXO` | string | Sex: `1`=male, `3`=female, `0`=NA |
-| `RACA_COR` | string | Race/color, coded per Portaria SAS nº 719/2007: `01` Branca, `02` Preta, `03` Parda, `04` Amarela, `05` Indígena, `99` Sem informação. **Note:** codes `03`/`04` (Parda/Amarela) are swapped relative to SINAN's `CS_RACA` — do not reuse one mapping for the other. See `documentos_para_script/Boletim_Raca_Cor.pdf` |
+| `SEXO` | string | Sex, **stored decoded**, not as DATASUS codes: `"Masculino"`, `"Feminino"` |
+| `RACA_COR` | string | Race/color, coded per Portaria SAS nº 719/2007: `01` Branca, `02` Preta, `03` Parda, `04` Amarela, `05` Indígena, `99` Sem informação. **Note:** codes `03`/`04` (Parda/Amarela) are swapped relative to SINAN's `CS_RACA` — do not reuse one mapping for the other. See `documentos_para_script/Boletim_Raca_Cor.pdf`. Confirmed against the data: code shares in SP 2014–2024 (unknown excluded) are `01` 60.8%, `02` 5.4%, `03` 32.6%, `04` 1.1%, `05` 0.1%, matching the state's 2022 census composition (Branca 57.8%, Preta 8.0%, Parda 33.0%, Amarela 1.2%, Indígena 0.1%) |
 | `DIAG_PRINC` | string | Primary diagnosis (ICD-10, **no dot, 4 chars** — see Appendix A). Carries the **T** code (nature of the substance), e.g. `"T600"` |
 | `DIAG_SECUN` | string | Secondary diagnosis (ICD-10, **no dot, 4 chars**). Where the **X/Y external-cause** code normally lives, e.g. `"X689"`. `"0000"` = not filled (69,976 records) |
 | `CID_ASSO` | string | Associated diagnosis (ICD-10, **no dot, 4 chars**) |
@@ -184,6 +184,14 @@ All sources below are joined here. Variable groups can be included or excluded v
 | `MARCA_UTI` | string | ICU marker |
 | `VAL_TOT` | string | Total reimbursement value (BRL) |
 | `pesticida` | logical | **Pesticide-specific flag (issue #7):** `TRUE` if `DIAG_PRINC` is T60 **or** a pesticide external-cause code (X48/X68/X87/Y18) appears in `DIAG_PRINC`, `DIAG_SECUN`, or `CID_ASSO` |
+| `CAR_INT` | string | Admission type, raw DATASUS code. Observed values `01`, `02`, `03`, `05`, `06`; populated for all records |
+| `COMPLEX` | string | Care complexity, raw DATASUS code. Observed values `02`, `03`; populated for all records |
+| `ETNIA` | string | Indigenous ethnicity, **stored decoded**; `"0000"` when not applicable. Filled in 36 of 76,527 records |
+| `MARCA_UCI` | string | Intermediate care unit indicator (`"00"`, `"01"`). Filled in 5 records |
+| `CBOR` | string | Occupation, **stored decoded** (CBO job title). Filled in **4 records** — not usable for occupational analysis |
+| `VINCPREV` | string | Social-security status, **stored decoded** (`"Empregado"`, `"Não segurado"`). Filled in 4 records |
+| `INSTRU` | string | Education level. **Empty in every record** |
+| `CID_NOTIF` | string | Notification ICD-10 code. **Empty in every record** |
 
 > **⚠️ Filtering by age — `IDADE` is a string.** Comparing it directly against a number
 > (`IDADE <= 14`) triggers a **lexicographic** comparison, which silently drops ages 2–9
@@ -245,8 +253,9 @@ Key analytical variables:
 | `DT_NOTIFIC` | date | Notification date |
 | `DT_SIN_PRI` | date | Date of first symptoms |
 | `ANO_NASC` | string | Patient birth year |
-| `CS_SEXO` | string | Sex: `"M"` = male, `"F"` = female |
-| `CS_RACA` | string | Race/color (national DATASUS coding): `1` Branca, `2` Preta, `3` Amarela, `4` Parda, `5` Indígena, `9` Ignorado. **Note:** codes `3`/`4` (Amarela/Parda) are swapped relative to SIH's `RACA_COR` — do not reuse one mapping for the other |
+| `NU_IDADE_N` | integer | Age, DATASUS coded: first digit is the unit (`1` hours, `2` days, `3` months, `4` years) and the rest is the value, so `4014` is 14 years. No missing values. Filter `NU_IDADE_N <= 4014` for ages 0–14 |
+| `CS_SEXO` | string | Sex: `"M"` = male, `"F"` = female, `"I"` = ignored |
+| `CS_RACA` | string | Race/color (national DATASUS coding): `1` Branca, `2` Preta, `3` Amarela, `4` Parda, `5` Indígena, `9` Ignorado. **Note:** codes `3`/`4` (Amarela/Parda) are swapped relative to SIH's `RACA_COR` — do not reuse one mapping for the other. Confirmed against the data: code shares in SP 2014–2024 (unknown excluded) are `1` 59.8%, `2` 7.5%, `3` 0.6%, `4` 31.9%, `5` 0.2%, so the ~32% Parda group sits at `4` here and at `03` in SIH |
 | `AGENTE_TOX` | string | Primary toxic agent category. Pesticide group: `02`=agricultural, `03`=domestic, `04`=public-health, `05`=rodenticide, `06`=veterinary. Blank/`99` in ~6% of rows |
 | `LAVOURA` | string | **Crop associated with exposure** (e.g. `"112.SOJA"`, `"088.MILHO"`). Non-empty values indicate agricultural context |
 | `CIRCUNSTAN` | string | Circumstance of exposure (2-char code): `01` Uso habitual, `02` Acidental, `03` Ambiental, `04` Uso terapêutico, `05` Prescrição médica inadequada, `06` Erro de administração, `07` Automedicação, `08` Abuso, `09` Ingestão de alimento ou bebida, `10` Tentativa de suicídio, `11` Tentativa de aborto, `12` Violência/homicídio, `13` Outra, `99` Ignorado. **Note:** `02` is "accidental" in general — whether it was an *occupational* accident is a separate yes/no field (`st_acidente_trabalho`). See `documentos_para_script/DIC_DADOS_NET - Intoxicacao Exogena.pdf` |
@@ -276,9 +285,9 @@ Key analytical variables:
 | `CAUSABAS_O` | string | Original underlying cause as recorded |
 | `CODMUNRES` | string | **Municipality of patient's residence** (6-digit IBGE code) |
 | `CODMUNOCOR` | string | Municipality of occurrence of death |
-| `SEXO` | string | Sex (coded) |
+| `SEXO` | string | Sex, **stored decoded**: `"Masculino"`, `"Feminino"` |
 | `IDADEanos` | integer | Age in years (derived) |
-| `RACACOR` | string | Race/ethnicity (coded) |
+| `RACACOR` | string | Race/color, **stored decoded**: `"Branca"`, `"Preta"`, `"Parda"`, `"Amarela"`, `"Indígena"` — no code mapping needed here, unlike SIH and SINAN |
 | `ESC2010` | string | Education level (2010 classification) |
 | `OCUP` | string | Occupation (CBO code) |
 | `ACIDTRAB` | string | Work-related accident indicator |
@@ -317,6 +326,14 @@ Key analytical variables:
 | `RESULTADO_NUM` | double | Numeric concentration (µg/L); `NA` for non-numeric results |
 | `VMP` | string | Maximum permitted value (µg/L) per Portaria GM/MS 888/2021 |
 | `TP_ABASTECIMENTO` | string | Water supply type |
+| `RESULTADO` | string | **Raw** result as delivered by SISAGUA, with comma decimal separator (`",001"`) — `as.numeric()` returns `NA`. Use `RESULTADO_NUM` |
+| `UNIDADE` | string | Measurement unit; always `"µg/L"` |
+| `LD` | string | Detection limit, raw string with comma decimal separator; `NA` in 74% of rows |
+| `LQ` | string | Quantification limit, raw string with comma decimal separator; `NA` in 12% of rows |
+| `NO_SOLUCAO_ABASTECIMENTO` | string | Name of the water supply system (free text, ~12,000 distinct values) |
+| `TP_CAPTACAO` | string | Catchment type (`"SUPERFICIAL"`, `"SUBTERRANEO"`); `NA` in 81% of rows |
+| `CAT_CAPTACAO_FINAL` | string | Catchment category, 9 values (e.g. `"NASCENTE"`, `"lago"`, `"corrego"`); `NA` in 81% of rows |
+| `TP_TRIMESTRE` | string | Reporting quarter; `NA` in 96.5% of rows |
 
 > **Detection threshold:** restrict to `TIPO_RESULTADO == "NUMERICO"` for quantifiable detections only. `RESULTADO_NUM > VMP` identifies regulatory exceedances.
 
@@ -590,6 +607,7 @@ Key variables: `cod_ibge`, `ivs`, `ivs_infraestrutura_urbana`, `ivs_capital_huma
 | `ibp_deprivation_mean` | double | Population-weighted mean deprivation score |
 | `ibp_deprivation_median` | double | Median deprivation score across census tracts |
 | `ibp_pct_urban` | double | % census tracts classified as urban |
+| `Nome_do_municipio` | string | Municipality name (original CIDACS column name, mixed case) |
 
 ### IPVS — Paulista Social Vulnerability Index
 
