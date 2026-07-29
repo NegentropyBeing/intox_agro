@@ -27,8 +27,11 @@ suppressMessages({
 
 outdir     <- "resultados"
 PEST_CODES <- c("X48", "X68", "X87", "Y18")
-AGE_BREAKS <- c(seq(0, 80, 5), Inf)
-AGE_LABELS <- c(paste0(seq(0, 75, 5), "-", seq(4, 79, 5)), "80+")
+# Childhood is split into 0-3, 4-7, 8-10 and 11-14; from 15 on the usual
+# five-year bands are kept so the adult range stays comparable.
+AGE_BREAKS <- c(0, 4, 8, 11, 15, seq(20, 80, 5), Inf)
+AGE_LABELS <- c("0-3", "4-7", "8-10", "11-14", "15-19",
+                paste0(seq(20, 75, 5), "-", seq(24, 79, 5)), "80+")
 age_group  <- function(x) cut(x, AGE_BREAKS, AGE_LABELS, right = FALSE)
 
 # --- Numerator: SIH records ---------------------------------------------------

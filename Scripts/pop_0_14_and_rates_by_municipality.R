@@ -10,12 +10,15 @@
 # Reads only from resultados/, so it runs on a clone of the repository without
 # the raw Bancos/ folder.
 #
-# Two case definitions per system:
-#   *_0_14_total      - full exogenous intoxication filter (T36-T65, X40-49,
-#                       X60-69, Y10-19 for SIH; the IEXO notification form for
-#                       SINAN)
-#   *_pest_0_14_total - pesticide-specific. For SIH, T60 or X48/X68/X87/Y18 in
-#                       DIAG_PRINC; for SINAN, AGENTE_TOX 02-06.
+# Case definitions:
+#   *_0_14_total         - full exogenous intoxication filter (T36-T65, X40-49,
+#                          X60-69, Y10-19 for SIH; the IEXO notification form
+#                          for SINAN)
+#   *_pest_0_14_total    - pesticide-specific. For SIH, T60 or X48/X68/X87/Y18
+#                          in DIAG_PRINC; for SINAN, AGENTE_TOX 02-06.
+#   hosp_t60_0_14_total  - SIH only, T60 in DIAG_PRINC. Narrowest definition:
+#                          poisoning by pesticide as the substance, without the
+#                          external-cause codes. SINAN has no equivalent tier.
 #
 # The SIH pesticide definition deliberately keys on DIAG_PRINC alone. The wider
 # pesticida flag also reads DIAG_SECUN and CID_ASSO, but those two fields are
@@ -57,11 +60,12 @@ den <- pop %>%
 sih <- read_parquet("resultados/SIH/sih_iexo_sp_2014_2024.parquet") %>%
   filter(COD_IDADE %in% c("Dias", "Meses") |
          (COD_IDADE == "Anos" & as.integer(IDADE) <= 14)) %>%
-  mutate(pesticide = substr(DIAG_PRINC, 1, 3) == "T60" |
-                     substr(DIAG_PRINC, 1, 3) %in% PEST_CODES) %>%
+  mutate(t60       = substr(DIAG_PRINC, 1, 3) == "T60",
+         pesticide = t60 | substr(DIAG_PRINC, 1, 3) %in% PEST_CODES) %>%
   group_by(cod_ibge = MUNIC_RES) %>%
   summarise(hosp_0_14_total      = n(),
             hosp_pest_0_14_total = sum(pesticide),
+            hosp_t60_0_14_total  = sum(t60),
             .groups = "drop")
 
 # --- Numerator: SINAN ---------------------------------------------------------
@@ -90,13 +94,15 @@ out <- den %>%
          hosp_rate_0_14_per100k_yr        = round(hosp_0_14_total        / pop_0_14_person_years * 1e5, 2),
          poison_rate_0_14_per100k_yr      = round(poison_0_14_total      / pop_0_14_person_years * 1e5, 2),
          hosp_pest_rate_0_14_per100k_yr   = round(hosp_pest_0_14_total   / pop_0_14_person_years * 1e5, 2),
-         poison_pest_rate_0_14_per100k_yr = round(poison_pest_0_14_total / pop_0_14_person_years * 1e5, 2)) %>%
+         poison_pest_rate_0_14_per100k_yr = round(poison_pest_0_14_total / pop_0_14_person_years * 1e5, 2),
+         hosp_t60_rate_0_14_per100k_yr    = round(hosp_t60_0_14_total    / pop_0_14_person_years * 1e5, 2)) %>%
   select(cod_ibge, nome_municipio, n_years,
          hosp_0_14_total, poison_0_14_total,
-         hosp_pest_0_14_total, poison_pest_0_14_total,
+         hosp_pest_0_14_total, poison_pest_0_14_total, hosp_t60_0_14_total,
          pop_0_14_person_years, pop_0_14_mean_annual, pop_0_14_2024,
          hosp_rate_0_14_per100k_yr, poison_rate_0_14_per100k_yr,
-         hosp_pest_rate_0_14_per100k_yr, poison_pest_rate_0_14_per100k_yr) %>%
+         hosp_pest_rate_0_14_per100k_yr, poison_pest_rate_0_14_per100k_yr,
+         hosp_t60_rate_0_14_per100k_yr) %>%
   arrange(desc(pop_0_14_person_years))
 
 # Records whose municipality of residence is 350000 ("Sao Paulo, municipality
@@ -108,5 +114,6 @@ write_csv(out, outfile)
 cat("Wrote", outfile, "-", nrow(out), "municipalities\n")
 cat("Statewide 0-14: hosp", sum(out$hosp_0_14_total),
     "| hosp pesticide", sum(out$hosp_pest_0_14_total),
+    "| hosp T60", sum(out$hosp_t60_0_14_total),
     "| notifications", sum(out$poison_0_14_total),
     "| notifications pesticide", sum(out$poison_pest_0_14_total), "\n")
