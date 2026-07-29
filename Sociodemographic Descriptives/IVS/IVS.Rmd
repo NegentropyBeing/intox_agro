@@ -640,3 +640,24 @@ ggplot(ivs_clean, aes(x = t_sem_lixo)) +
   geom_histogram(bins = 30) +
   theme_minimal()
 ```
+
+#### Save dataset
+
+```{r}
+
+#select variables
+ivs_quartiles <- ivs_clean %>%
+  select(
+cod_ibge,
+ivs_renda_e_trabalho_quartile,
+renda_per_capita_quartile,
+i_gini_quartile,
+t_analf_15m_quartile,
+ivs_capital_humano_quartile,
+t_sem_agua_esgoto_quartile,
+t_sem_lixo_quartile)
+
+write.csv(ivs_quartiles, "ivs_quartiles.csv", row.names = FALSE)
+
+
+```

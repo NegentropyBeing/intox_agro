@@ -63,6 +63,10 @@ race |>
 race |>   
   filter(is.na(pct_indigena)) |>   
   select(cod_ibge, pct_indigena)
+
+race |>   
+  filter(is.na(pct_parda)) |>   
+  select(cod_ibge, pct_parda)
 ```
 
 Indígena: missing for 73 municipalities
@@ -125,6 +129,7 @@ race_quartiles <- race %>%
     Other_Q    = ntile(pct_other, 4),
     Parda_Q    = ntile(pct_parda, 4))
 
+#save
 write.csv(race_quartiles, "race_quartiles.csv", row.names = FALSE)
 
 ```
@@ -216,4 +221,23 @@ race %>%
 
 ## Raw Distribution - SP State
 
-## 
+```{r}
+sum(race$pct_branca)
+38536.4/645
+
+sum(race$pct_parda)
+21698.32/645
+
+sum(race$pct_other, na.rm = TRUE)
+3824.66/645
+
+
+```
+
+59.75% Branca
+
+33.64% Parda
+
+5.93% Other
+
+0.68% Missing

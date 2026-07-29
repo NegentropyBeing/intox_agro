@@ -21,6 +21,7 @@ library(purrr)
 library(DataExplorer)
 library(knitr)
 library(kableExtra)
+library(classInt)
 ```
 
 ##### Dataset
@@ -42,21 +43,50 @@ plot_missing(
 
 ```{r}
 #year missingness
-consolidada %>%
+missing_summary <- consolidada %>%
   group_by(ano) %>%
   summarise(
-    pct_missing_detect =
-      mean(is.na(sisagua_pct_deteccao)) * 100,
-    pct_missing_area =
-      mean(is.na(pam_area_colhida_ha)) * 100,
-    pct_missing_value =
-      mean(is.na(pam_valor_prod_mil_reais)) * 100
+    `Detection (%)` = mean(is.na(sisagua_pct_deteccao)) * 100,
+    `Harvested Area (%)` = mean(is.na(pam_area_colhida_ha)) * 100,
+    `Crop Value (%)` = mean(is.na(pam_valor_prod_mil_reais)) * 100,
+    .groups = "drop"
+  ) %>%
+  pivot_longer(
+    cols = -ano,
+    names_to = "Variable",
+    values_to = "Percent_Missing"
+  )
+
+ggplot(missing_summary,
+       aes(x = ano, y = Percent_Missing,
+           color = Variable, group = Variable)) +
+  geom_line(linewidth = 1.2) +
+  geom_point(size = 2) +
+  scale_x_continuous(breaks = sort(unique(missing_summary$ano))) +
+  scale_y_continuous(
+    limits = c(0, 100),
+    breaks = seq(0, 100, 10)
+  ) +
+  labs(
+    title = "Percentage of Missing Values by Year",
+    x = "Year",
+    y = "Missing (%)",
+    color = "Variable"
+  ) +
+  theme_minimal() +
+  theme(
+    plot.title = element_text(face = "bold"),
+    axis.text.x = element_text(angle = 45, hjust = 1)
   )
 
 #municipality missingness
 consolidada %>%
   filter(is.na(sisagua_pct_deteccao)) %>%
   distinct(cod_ibge)
+
+consolidada %>%
+  filter(is.na(pam_area_colhida_ha)) %>%
+  summarise(n_municipalities = n_distinct(cod_ibge))
 
 #trends in missingness
 consolidada %>%
@@ -127,13 +157,29 @@ ggplot(detect_raw_plot,
 ### Create Quartiles
 
 ```{r}
+
+#breaks_deteccao <- classIntervals(
+ # consolidada$sisagua_pct_deteccao,
+  #n = 4,
+  #style = "equal")$brks
+
+#consolidada <- consolidada %>%
+ # mutate(
+  #  sisagua_pct_deteccao_quartile = cut(
+   #   sisagua_pct_deteccao,
+    #  breaks = c(0, 25, 50, 75, 100),
+     # include.lowest = TRUE,
+      #labels = 1:4))
+quantile(consolidada$sisagua_pct_deteccao,
+         probs = c(0, 0.25, 0.5, 0.75, 1),
+         na.rm = TRUE)
+
+
 consolidada <- consolidada %>%
-  group_by(ano) %>%
   mutate(
-    sisagua_pct_deteccao_quartile =
-      ntile(desc(sisagua_pct_deteccao), 4)
-  ) %>%
-  ungroup()
+    sisagua_pct_deteccao_q = ntile(sisagua_pct_deteccao, 4)
+  )
+
 ```
 
 ## Table
@@ -144,11 +190,11 @@ detect_summary <- consolidada %>%
   select(
     ano,
     sisagua_pct_deteccao,
-    sisagua_pct_deteccao_quartile
+    sisagua_pct_deteccao_q
   ) %>%
   rename(
     value = sisagua_pct_deteccao,
-    Quartile = sisagua_pct_deteccao_quartile
+    Quartile = sisagua_pct_deteccao_q
   ) %>%
   group_by(ano, Quartile) %>%
   summarise(
@@ -173,12 +219,12 @@ detect_summary %>%
     digits = 2,
     col.names = c(
       "Year",
-      "Quartile",
+      "Category",
       "n",
       "Median",
       "Range"
     ),
-    caption = "% Detected Samples in Quartiles by Year"
+    caption = "% Detected Samples by Year"
   ) %>%
   collapse_rows(columns = 1) %>%
   kable_styling(full_width = FALSE)
@@ -196,16 +242,38 @@ ggplot(detect_summary,
   geom_line(linewidth = 1) +
   geom_point(size = 2) +
   labs(
-    title = "Median % Samples with Quantifiable Detection in Quartiles by Year",
+    title = "Median % Samples with Quantifiable Detection by Year",
     x = "Year",
     y = "Median % Samples with Quantifiable Detection",
-    color = "Quartile"
+    color = "Category"
   ) +
   theme_minimal()
 
+#Distribution
+category_counts <- consolidada %>%
+  group_by(ano, sisagua_pct_deteccao_quartile) %>%
+  summarise(
+    n_municipalities = n(),
+    .groups = "drop"
+  )
+
+category_counts %>%
+  ggplot(aes(x = ano,
+             y = n_municipalities,
+             color = sisagua_pct_deteccao_quartile,
+             group = sisagua_pct_deteccao_quartile)) +
+  geom_line(linewidth = 1.1) +
+  geom_point(size = 2) +
+  scale_x_continuous(breaks = unique(category_counts$ano)) +
+  labs(
+    x = "Year",
+    y = "Number of municipalities",
+    color = "Detection category"
+  ) +
+  theme_minimal()
 ```
 
-Here we can see that a majority of municipalities do not detect quantifiable levels of pesticides in their samples. However, among samples in the top 25% and 50% of samples with quantifiable levels of pesticides, we see that 100% of samples tested from 2014-2016 had quantifiable levels of pesticides, dropping to below 25% from 2019-2022 and rising back up to above 50% 2023-2024.
+Median quantifiable pesticide detection percentages remained relatively stable between 2014 and 2024. Municipalities in the highest detection category consistently had median values near 100%, while those in the lowest category were near 0% from 2014-2024. We also see in the graph showing the number of municipalities in each category over time, that there are more municipalities joining the lowest levels of detections (category 1) compared to the other categories, while NA also increases.
 
 ## Normality
 
@@ -259,13 +327,26 @@ ggplot(distinct_plot,
 ### Create Quartiles
 
 ```{r}
+#consolidada <- consolidada %>%
+ # group_by(ano) %>%
+ # mutate(
+ #   sisagua_n_pesticidas_detect_quartile =
+ #     ntile(sisagua_n_pesticidas_detect, 4)
+ # ) %>%
+#  ungroup()
+
+breaks_detect <- classIntervals(
+  consolidada$sisagua_n_pesticidas_detect,
+  n = 4,
+  style = "equal")$brks
+
 consolidada <- consolidada %>%
-  group_by(ano) %>%
   mutate(
-    sisagua_n_pesticidas_detect_quartile =
-      ntile(desc(sisagua_n_pesticidas_detect), 4)
-  ) %>%
-  ungroup()
+    sisagua_n_pesticidas_detect_q = cut(
+      sisagua_n_pesticidas_detect,
+      breaks = c(0, 25, 50, 75, 100),
+      include.lowest = TRUE,
+      labels = 1:4))
 ```
 
 ## Table
@@ -275,11 +356,11 @@ distinct_summary <- consolidada %>%
   select(
     ano,
     sisagua_n_pesticidas_detect,
-    sisagua_n_pesticidas_detect_quartile
+    sisagua_n_pesticidas_detect_q
   ) %>%
   rename(
     value = sisagua_n_pesticidas_detect,
-    Quartile = sisagua_n_pesticidas_detect_quartile
+    Quartile = sisagua_n_pesticidas_detect_q
   ) %>%
   group_by(ano, Quartile) %>%
   summarise(
@@ -304,12 +385,12 @@ distinct_summary %>%
     digits = 2,
     col.names = c(
       "Year",
-      "Quartile",
+      "Category",
       "n",
       "Median",
       "Range"
     ),
-    caption = "# Distinct Pesticides Detected in Quartiles by Year"
+    caption = "# Distinct Pesticides Detected by Year"
   ) %>%
   collapse_rows(columns = 1) %>%
   kable_styling(full_width = FALSE)
@@ -388,13 +469,13 @@ ggplot(distinct_plot,
 ### Create Quartiles
 
 ```{r}
-consolidada <- consolidada %>%
-group_by(ano) %>%
-  mutate(
-    pam_area_colhida_ha_quartile =
-      ntile(desc(pam_area_colhida_ha), 4)
-  ) %>%
-  ungroup()
+#consolidada <- consolidada %>%
+#group_by(ano) %>%
+ # mutate(
+  #  pam_area_colhida_ha_quartile =
+  #    ntile(pam_area_colhida_ha, 4)
+  #) %>%
+ # ungroup()
 ```
 
 ## Table
@@ -520,13 +601,15 @@ ggplot(valor_raw_plot,
 ### Create Quartiles
 
 ```{r}
-consolidada <- consolidada %>%
-  group_by(ano) %>%
-  mutate(
-    pam_valor_prod_mil_reais_quartile =
-      ntile(desc(pam_valor_prod_mil_reais), 4)
-  ) %>%
-  ungroup()
+#consolidada <- consolidada %>%
+  #group_by(ano) %>%
+ # mutate(
+  #  pam_valor_prod_mil_reais_quartile =
+    #  ntile(pam_valor_prod_mil_reais, 4)
+ # ) %>%
+  #ungroup()
+
+
 ```
 
 ## Table
@@ -603,4 +686,27 @@ The median total agricultural production value increases between 2014 and 2024 f
 ggplot(consolidada, aes(x = pam_valor_prod_mil_reais)) +
   geom_histogram(bins = 30) +
   theme_minimal()
+```
+
+#### Save Dataset
+
+```{r}
+agricultural_gis <- consolidada %>%
+  select(
+    cod_ibge,
+    sisagua_pct_deteccao_quartile,
+    sisagua_n_pesticidas_detect_quartile,
+    pam_area_colhida_ha_quartile,
+    pam_valor_prod_mil_reais_quartile
+  )
+
+
+#save separate dataset per year
+
+for (yr in 2014:2024) {
+  consolidada %>%
+    filter(ano == yr) %>%
+    write_csv(paste0("agricultural_", yr, ".csv"))
+}
+
 ```

@@ -1,0 +1,87 @@
+---
+title: "SINAN by Municipality"
+output: html_document
+date: "2026-07-28"
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+##### Packages
+
+```{r}
+library(DataExplorer)
+library(arrow)
+library(readr)
+library(dplyr)
+library(ggplot2)
+library(tidyr)
+library(purrr)
+library(knitr)
+library(kableExtra)
+library(stringr)
+library(gt)
+library(scales)
+library(gtsummary)
+library(flextable)
+library(writexl)
+library(openxlsx)
+
+```
+
+##### Dataset
+
+```{r}
+pop_0_14_and_rates_by_municipality_2014_2024 <- read_csv("~/GitHub/intox_agro/resultados/pop_0_14_and_rates_by_municipality_2014_2024.csv")
+
+#clean
+SINAN_MUNIC <- pop_0_14_and_rates_by_municipality_2014_2024 %>%
+  select(
+    cod_ibge,
+    poison_pest_0_14_total,
+    poison_pest_rate_0_14_per100k_yr)
+
+SINAN_MUNIC <- SINAN_MUNIC %>%
+  filter(poison_pest_0_14_total > 0)
+
+```
+
+### Table
+
+```{r}
+# Total poisoning notifications across all municipalities
+# Total poisoning notifications across all municipalities
+total_notifications <- sum(SINAN_MUNIC$poison_pest_0_14_total, na.rm = TRUE)
+
+munic_rate_range <- SINAN_MUNIC %>%
+  group_by(cod_ibge) %>%
+  summarise(
+    notifications = sum(poison_pest_0_14_total, na.rm = TRUE),
+    
+    `Poisoning notifications, n (%)` = paste0(
+      notifications,
+      " (",
+      round(100 * notifications / total_notifications, 1),
+      "%)"
+    ),
+    
+    `Median Poisoning Notification rate (Range)` = paste0(
+      round(median(poison_pest_rate_0_14_per100k_yr, na.rm = TRUE), 1),
+      " (",
+      round(min(poison_pest_rate_0_14_per100k_yr, na.rm = TRUE), 1),
+      "–",
+      round(max(poison_pest_rate_0_14_per100k_yr, na.rm = TRUE), 1),
+      ")"
+    ),
+    
+    .groups = "drop"
+  ) %>%
+  select(
+    cod_ibge,
+    `Poisoning notifications, n (%)`,
+    `Median Poisoning Notification rate (Range)`
+  )
+
+munic_rate_range
+```

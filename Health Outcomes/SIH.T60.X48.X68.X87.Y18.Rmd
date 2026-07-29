@@ -1,0 +1,959 @@
+---
+title: "SIH T60/X48/X68/X87/Y18"
+output: html_document
+date: "2026-06-02"
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+##### Packages
+
+```{r}
+library(DataExplorer)
+library(arrow)
+library(readr)
+library(dplyr)
+library(ggplot2)
+library(tidyr)
+library(purrr)
+library(knitr)
+library(kableExtra)
+library(stringr)
+library(gt)
+library(scales)
+library(gtsummary)
+library(flextable)
+library(writexl)
+
+```
+
+## Using Consolidated for Analyses
+
+*This dataset already has transformed variables from SIH*
+
+```{r}
+consolidada <- read_parquet("~/GitHub/intox_agro/resultados/base_consolidada_sp_2014_2024.parquet")
+
+#subset
+poisoning <- consolidada |>
+  select(cod_ibge,
+         ano,
+         pop_total,
+         sih_n_hosp_pesticida_0_14,
+         taxa_hosp_pesticida_0_14_100k,
+         )
+```
+
+# Hospitalization per 100K, ages 0-14 ICD codes T60, X48, X68, X87, Y18
+
+#### Missing
+
+```{r}
+plot_missing(poisoning)
+
+```
+
+### Aggregate Rate Frequencies
+
+```{r}
+median(poisoning$taxa_hosp_pesticida_0_14_100k)
+
+mean(poisoning$taxa_hosp_pesticida_0_14_100k)
+```
+
+#### Create Quartiles - same cuts across all years
+
+```{r}
+#Quartile breaks using only non-zero values, same quartiles each year 
+breaks_hosp <- poisoning %>%
+  filter(taxa_hosp_pesticida_0_14_100k > 0) %>%
+  pull(taxa_hosp_pesticida_0_14_100k) %>%
+  quantile(probs = c(0, 0.25, 0.5, 0.75, 1), na.rm = TRUE)
+
+# Create new variable in the full dataset
+poisoning <- poisoning %>%
+  mutate(
+    taxa_hosp_pesticida_0_14_100k_q = case_when(
+      taxa_hosp_pesticida_0_14_100k == 0 ~ "0",
+      TRUE ~ as.character(
+        cut(
+          taxa_hosp_pesticida_0_14_100k,
+          breaks = breaks_hosp,
+          include.lowest = TRUE,
+          labels = c("1", "2", "3", "4")))))
+
+```
+
+## Table
+
+```{r}
+
+hosp_quartile_summary <- poisoning %>%
+  group_by(ano, taxa_hosp_pesticida_0_14_100k_q) %>%
+  summarise(
+    n_municipalities = n(),
+    median_population = median(pop_total, na.rm = TRUE),
+    median_hosp = median(taxa_hosp_pesticida_0_14_100k, na.rm = TRUE),
+    min_pop = min(pop_total, na.rm = TRUE),
+    max_pop = max(pop_total, na.rm = TRUE),
+    min_hosp = min(taxa_hosp_pesticida_0_14_100k, na.rm = TRUE),
+    max_hosp = max(taxa_hosp_pesticida_0_14_100k, na.rm = TRUE),
+    .groups = "drop"
+  ) %>%
+  group_by(taxa_hosp_pesticida_0_14_100k_q) %>%
+  summarise(
+    `Municipalities (median, range)` = paste0(
+      round(median(n_municipalities)),
+      " (",
+      min(n_municipalities),
+      "–",
+      max(n_municipalities),
+      ")"
+    ),
+    `Population (median, range)` = paste0(
+      round(median(median_population)),
+      " (",
+      round(min(min_pop)),
+      "–",
+      round(max(max_pop)),
+      ")"
+    ),
+    `Hospitalization rate (median, range)` = paste0(
+      round(median(median_hosp), 2),
+      " (",
+      round(min(min_hosp), 2),
+      "–",
+      round(max(max_hosp), 2),
+      ")"
+    ),
+    .groups = "drop"
+  ) %>%
+  rename(
+    Quartile = taxa_hosp_pesticida_0_14_100k_q
+  ) %>%
+  arrange(Quartile)
+
+
+hosp_quartile_summary
+
+```
+
+```{r}
+#Above table for 2014, 2017, 2021, 2024
+hosp_quartile_summary_years <- poisoning %>%
+  filter(ano %in% c(2014, 2017, 2021, 2024)) %>%
+  group_by(ano, taxa_hosp_pesticida_0_14_100k_q) %>%
+  summarise(
+    `Number of municipalities` = n(),
+    `Population (median, range)` = paste0(
+      round(median(pop_total, na.rm = TRUE)),
+      " (",
+      round(min(pop_total, na.rm = TRUE)),
+      "–",
+      round(max(pop_total, na.rm = TRUE)),
+      ")"
+    ),
+    `Hospitalization rate (median, range)` = paste0(
+      round(median(taxa_hosp_pesticida_0_14_100k, na.rm = TRUE), 2),
+      " (",
+      round(min(taxa_hosp_pesticida_0_14_100k, na.rm = TRUE), 2),
+      "–",
+      round(max(taxa_hosp_pesticida_0_14_100k, na.rm = TRUE), 2),
+      ")"
+    ),
+    .groups = "drop"
+  ) %>%
+  rename(
+    Year = ano,
+    Quartile = taxa_hosp_pesticida_0_14_100k_q
+  ) %>%
+  arrange(Year, Quartile)
+
+hosp_quartile_summary_years
+
+# write_xlsx(hosp_quartile_summary_years, "hosp_quartile_summary_years.xlsx")
+
+```
+
+```{r}
+#all year summary
+hosp_rate_14_24_summary <- poisoning %>%
+  select(
+    ano,
+    taxa_hosp_pesticida_0_14_100k,
+    taxa_hosp_pesticida_0_14_100k_q
+  ) %>%
+  rename(
+    value = taxa_hosp_pesticida_0_14_100k,
+    Quartile = taxa_hosp_pesticida_0_14_100k_q
+  ) %>%
+  group_by(ano, Quartile) %>%
+  summarise(
+    n = n(),
+    Median = median(value, na.rm = TRUE),
+    Min = min(value, na.rm = TRUE),
+    Max = max(value, na.rm = TRUE),
+    .groups = "drop"
+  ) %>%
+  mutate(
+    Range = paste0(Min, "-", Max)
+  ) %>%
+  select(ano, Quartile, n, Median, Range)
+
+hosp_rate_14_24_summary
+```
+
+## Plot
+
+```{r}
+#raw
+hosp_summary <- poisoning %>%
+  group_by(ano) %>%
+  summarise(
+    total_hosp = sum(sih_n_hosp_pesticida_0_14, na.rm = TRUE),
+    .groups = "drop"
+  )
+
+ggplot(hosp_summary,
+       aes(x = ano, y = total_hosp)) +
+  geom_line(linewidth = 1) +
+  geom_point(size = 3) +
+  scale_x_continuous(breaks = 2014:2024) +
+  scale_y_continuous(
+    expand = expansion(mult = c(0.02, 0.08))
+  ) +
+  labs(
+        title = "Number of Hospitalizations ages 0-14 years",
+
+    x = "Year",
+    y = "Hospitalizations (n)"
+  ) +
+  theme(
+    axis.title = element_text(face = "bold"),
+    axis.text = element_text(color = "black"),
+    legend.title = element_text(face = "bold"),
+    legend.position = "right") 
+
+#rate plot
+rate_summary <- poisoning %>%
+  group_by(ano) %>%
+  summarise(
+    hosp_rate = sum(taxa_hosp_pesticida_0_14_100k, na.rm = TRUE),
+    .groups = "drop"
+  )
+
+ggplot(rate_summary, aes(x = ano, y = hosp_rate, group = 1)) +
+   geom_line(linewidth = 1) +
+  geom_point(size = 3) +
+  scale_x_continuous(breaks = 2014:2024) +
+  scale_y_continuous(
+    expand = expansion(mult = c(0.02, 0.08))
+  ) +
+  labs(
+    x = "Year",
+    y = "Hospitalizations per 100K",
+    title = "Hospitalization Rate Among children aged 0–14 years"
+  ) +
+theme(
+    axis.title = element_text(face = "bold"),
+    axis.text = element_text(color = "black"),
+    legend.title = element_text(face = "bold"),
+    legend.position = "right") 
+#quartiles
+
+ggplot(hosp_rate_14_24_summary,
+       aes(x = ano, y = Median, color = factor(Quartile))) +
+  geom_line() +
+  geom_point() +
+  scale_x_continuous(
+    breaks = unique(sort(hosp_rate_14_24_summary$ano))
+  ) +
+  labs(
+    title = "Median Hospitalization Rate Ages 0-14 years per 100K",
+    x = "Year",
+    y = "Median Hospitalization Rate per 100K",
+    color = "Quartile"
+  ) +
+  theme_minimal()
+```
+
+## Ribbon Plot
+
+```{r}
+
+summary_quartile <- poisoning %>%
+  group_by(ano, taxa_hosp_pesticida_0_14_100k_q) %>%
+  summarise(
+    min = min(taxa_hosp_pesticida_0_14_100k, na.rm = TRUE),
+    median = median(taxa_hosp_pesticida_0_14_100k, na.rm = TRUE),
+    max = max(taxa_hosp_pesticida_0_14_100k, na.rm = TRUE),
+    .groups = "drop"
+  )
+
+ggplot(
+  summary_quartile,
+  aes(
+    x = ano,
+    y = median,
+    color = factor(taxa_hosp_pesticida_0_14_100k_q),
+    group = taxa_hosp_pesticida_0_14_100k_q
+  )
+) +
+  geom_linerange(aes(ymin = min, ymax = max), alpha = 0.5) +
+  geom_line(linewidth = 1) +
+  geom_point(size = 2) +
+  scale_x_continuous(breaks = unique(summary_quartile$ano)) +
+  labs(
+    title = "Median Hospitalization Rate Ages 0–14 years per 100K",
+    x = "Year",
+    y = "Median Hospitalizations per 100K",
+    color = "Quartile"
+  ) +
+  theme_minimal()
+  
+```
+
+## Extreme Values
+
+```{r}
+range(poisoning$taxa_hosp_pesticida_0_14_100k, na.rm = TRUE)
+
+consolidada %>%
+  filter(taxa_hosp_pesticida_0_14_100k > 30) %>%
+  arrange(desc(taxa_hosp_pesticida_0_14_100k)) %>%
+  select(cod_ibge, ano, taxa_hosp_pesticida_0_14_100k)
+
+
+#table
+poisoning %>%
+  group_by(cod_ibge) %>%
+  summarise(
+    n_years_over_30 = sum(taxa_hosp_pesticida_0_14_100k > 30, na.rm = TRUE),
+    .groups = "drop"
+  ) %>%
+  filter(n_years_over_30 > 0) %>%
+  arrange(desc(n_years_over_30))
+```
+
+## Normality
+
+```{r}
+ggplot(poisoning, aes(x = taxa_hosp_pesticida_0_14_100k)) +
+  geom_histogram(bins = 30) +
+  theme_minimal()
+```
+
+#### Save dataset for mapping
+
+```{r}
+
+#for (yr in 2014:2024) {
+#  poisoning %>%
+#    filter(ano == yr) %>%
+#    write_csv(paste0("poisoning_", yr, ".csv"))}
+```
+
+# Using SIH
+
+```{r}
+SIH <- read_parquet("~/GitHub/intox_agro/resultados/SIH/sih_iexo_sp_2014_2024.parquet")
+
+```
+
+```{r}
+#All ICD for Pesticides
+SIH_0_14_pesticida <- SIH |>
+  filter(
+    substr(DIAG_PRINC, 1, 3) %in% c("T60", "X48", "X68", "X87", "Y18"),
+    COD_IDADE %in% c("Dias", "Meses") |
+      (COD_IDADE == "Anos" & as.integer(IDADE) <= 14))
+
+unique(SIH_0_14_pesticida$DIAG_PRINC)
+```
+
+## Missingness
+
+```{r}
+plot_missing(SIH_0_14_pesticida)
+
+sum(is.na(SIH_0_14_pesticida$RACA_COR))
+
+SIH_0_14_pesticida %>%
+  filter(is.na(RACA_COR)) %>%
+  distinct(MUNIC_RES)
+
+```
+
+## Descriptive Table of Municipalities
+
+```{r}
+#Municipality dataset
+
+pop_0_14_and_rates_by_municipality_2014_2024 <- read_csv("~/GitHub/intox_agro/resultados/pop_0_14_and_rates_by_municipality_2014_2024.csv")
+
+```
+
+```{r}
+SIH_0_14_count <- SIH_0_14_pesticida %>%
+  count(MUNIC_RES) %>%
+  arrange(MUNIC_RES) %>%
+  mutate(
+    `n (%)` = paste0(n, " (", percent(n / sum(n), accuracy = 0.1), ")")
+  ) %>%
+  select(MUNIC_RES, `n (%)`)
+
+SIH_0_14_count
+
+#join
+SIH_0_14_count <- SIH_0_14_count %>%
+  mutate(MUNIC_RES = as.numeric(MUNIC_RES))
+
+munic_cases <- pop_0_14_and_rates_by_municipality_2014_2024 %>%
+  semi_join(SIH_0_14_count, by = c("cod_ibge" = "MUNIC_RES"))
+
+#just rates
+munic_rates <- munic_cases %>%
+  select(cod_ibge, hosp_pest_rate_0_14_per100k_yr) %>%
+  arrange(cod_ibge)
+
+munic_rates
+
+#add range from consolidated
+SIH_0_14_count <- SIH_0_14_count %>%
+  mutate(MUNIC_RES = as.character(MUNIC_RES))
+
+consolidada_filtered <- consolidada %>%
+  select(cod_ibge, ano, taxa_hosp_pesticida_0_14_100k, pop_0_14) %>%
+  semi_join(
+    SIH_0_14_count,
+    by = c("cod_ibge" = "MUNIC_RES")
+  )
+
+munic_rate_range <- consolidada_filtered %>%
+  group_by(cod_ibge) %>%
+  summarise(
+    `Median hospitalization rate` = round(
+      median(taxa_hosp_pesticida_0_14_100k, na.rm = TRUE), 1
+    ),
+    `Hospitalization rate range` = paste0(
+      round(min(taxa_hosp_pesticida_0_14_100k, na.rm = TRUE), 1),
+      "–",
+      round(max(taxa_hosp_pesticida_0_14_100k, na.rm = TRUE), 1)
+    ),
+    .groups = "drop"
+  )
+
+
+munic_rate_range
+```
+
+## Types of Intoxication
+
+```{r}
+#table
+diag_table <- SIH_0_14_pesticida %>%
+  count(DIAG_PRINC, name = "Frequency") %>%
+  mutate(
+    Percent = Frequency / sum(Frequency)) %>%
+  arrange(desc(Frequency))
+
+diag_table %>%
+  gt() %>%
+  fmt_percent(
+    columns = Percent,
+    decimals = 1) %>%
+  cols_label(
+    DIAG_PRINC = "Principal Diagnosis (ICD-10 Code)",
+    Frequency = "n",
+    Percent = "%") %>%
+  tab_header(
+    title = md("**Distribution of Principal Diagnoses Among Hospitalizations of Children Aged 0–14 Years**")) %>%
+  fmt_number(
+    columns = Frequency,
+    decimals = 0,
+    use_seps = TRUE)
+
+#plot
+ggplot(SIH_0_14_pesticida, aes(x = DIAG_PRINC)) +
+  geom_bar(fill = "#2171B5", color = "black") +
+  theme(
+    axis.title = element_text(face = "bold"),
+    axis.text = element_text(color = "black"),
+    legend.title = element_text(face = "bold"),
+    legend.position = "right") +
+  xlab("Principal Diagnosis") +
+  ylab("Count")
+
+```
+
+#### By Year
+
+```{r}
+diag_plot <- SIH_0_14_pesticida %>%
+  count(ANO_CMPT, DIAG_PRINC, name = "Frequency") %>%
+  group_by(ANO_CMPT) %>%
+  slice_max(Frequency, n = 10, with_ties = FALSE) %>%
+  ungroup()
+
+ggplot(diag_plot,
+       aes(x = factor(ANO_CMPT),
+           y = DIAG_PRINC,
+           size = Frequency)) +
+  geom_point(color = "#2171B5") +
+  scale_size(range = c(3, 10)) +
+  labs(
+    x = "Year",
+    y = "ICD-10 code",
+    size = "Hospitalizations"
+  ) +
+  theme(
+    axis.title = element_text(face = "bold"),
+    axis.text = element_text(color = "black"),
+    legend.title = element_text(face = "bold"),
+    legend.position = "right") 
+```
+
+#### By Age Group
+
+```{r}
+#Create var
+SIH_0_14_pesticida <- SIH_0_14_pesticida %>%
+  mutate(
+    IDADE = as.numeric(IDADE),
+    age_group = case_when(
+      COD_IDADE %in% c("Dias", "Meses") ~ "0–3 years",
+      COD_IDADE == "Anos" & IDADE >= 0 & IDADE <= 3 ~ "0–3 years",
+      COD_IDADE == "Anos" & IDADE >= 4 & IDADE <= 7 ~ "4–7 years",
+      COD_IDADE == "Anos" & IDADE >= 8 & IDADE <= 10 ~ "8–10 years",
+      COD_IDADE == "Anos" & IDADE >= 11 & IDADE <= 14 ~ "11–14 years",
+      TRUE ~ NA_character_),
+    age_group = factor(
+      age_group,
+      levels = c("0–3 years", "4–7 years", "8–10 years", "11–14 years")))
+```
+
+```{r}
+#table
+diag_age_table <- SIH_0_14_pesticida %>%
+  tbl_cross(
+    row = age_group,
+    col = DIAG_PRINC,
+    percent = "row"
+  ) %>%
+  modify_header(label ~ "**Age group**") %>%
+  bold_labels()
+
+diag_age_table
+
+#plot
+diag_age <- SIH_0_14_pesticida %>%
+  count(age_group, DIAG_PRINC)
+
+ggplot(diag_age,
+       aes(x = age_group, y = n, fill = DIAG_PRINC)) +
+  geom_col(position = "fill") +
+scale_fill_manual(values = palette.colors(10, palette = "Tableau 10")) +
+  scale_y_continuous(
+    labels = scales::label_percent(accuracy = 1)
+  )+
+  theme_classic(base_size = 12) +
+  theme(
+    axis.title = element_text(face = "bold"),
+    axis.text = element_text(color = "black"),
+    legend.title = element_text(face = "bold"),
+    legend.position = "right") +
+  labs(
+    x = "Age group",
+    y = "Hospitalizations (%)",
+    fill = "Principal Diagnosis")
+```
+
+#### By Sex
+
+```{r}
+#plot
+diag_sex <- SIH_0_14_pesticida %>%
+  count(SEXO, DIAG_PRINC)
+
+ggplot(diag_sex,
+       aes(x = SEXO, y = n, fill = DIAG_PRINC)) +
+  geom_col(position = "fill") +
+scale_fill_manual(values = palette.colors(10, palette = "Tableau 10")) +
+  scale_y_continuous(labels = scales::percent) +
+  theme(
+    axis.title = element_text(face = "bold"),
+    axis.text = element_text(color = "black"),
+    legend.title = element_text(face = "bold"),
+    legend.position = "right") +
+  labs(
+    x = "Sex",
+    y = "Hospitalizations (%)",
+    fill = "Principal Diagnosis")
+```
+
+#### By Race
+
+```{r}
+#Recode
+SIH_0_14_pesticida <- SIH_0_14_pesticida %>%
+  mutate(
+    RACA_COR = case_when(
+      RACA_COR == "01" ~ "Branca (White)",
+      RACA_COR == "02" ~ "Preta (Black)",
+      RACA_COR == "03" ~ "Parda (Brown/Mixed)",
+      RACA_COR == "04" ~ "Amarela (Asian)",
+      RACA_COR == "05" ~ "Indígena (Indigenous)",
+      is.na(RACA_COR) ~ "Missing",
+      TRUE ~ "Unknown"
+    )
+  )
+```
+
+```{r}
+#Stacked
+diag_age <- SIH_0_14_pesticida %>%
+  count(RACA_COR, DIAG_PRINC)
+
+ggplot(diag_age,
+       aes(x = RACA_COR, y = n, fill = DIAG_PRINC)) +
+  geom_col(position = "fill") +
+scale_fill_manual(values = palette.colors(10, palette = "Tableau 10")) +
+  scale_y_continuous(labels = scales::percent) +
+  theme(
+    axis.title = element_text(face = "bold"),
+    axis.text = element_text(color = "black"),
+    legend.title = element_text(face = "bold"),
+    legend.position = "right") +
+  labs(
+    x = "Race",
+    y = "Hospitalizations (%)",
+    fill = "Principal diagnosis")
+```
+
+## Age Groups
+
+```{r}
+#Table
+age_table <- SIH_0_14_pesticida %>%
+  count(age_group, name = "Frequency") %>%
+  mutate(
+    Percent = Frequency / sum(Frequency)) %>%
+  arrange(desc(Frequency))
+
+age_table %>%
+  gt() %>%
+  fmt_percent(
+    columns = Percent,
+    decimals = 1) %>%
+  cols_label(
+    age_group = "Age Group",
+    Frequency = "n",
+    Percent = "%") %>%
+  tab_header(
+    title = md("**Distribution of Ages Amongst Hospitalizations**")) %>%
+  fmt_number(
+    columns = Frequency,
+    decimals = 0,
+    use_seps = TRUE)
+
+#Aggregate Plot
+ggplot(SIH_0_14_pesticida, aes(x = age_group, fill = age_group)) +
+  geom_bar(aes(y = after_stat(count / sum(count)))) +
+  geom_text(
+    stat = "count",
+    aes(
+      y = after_stat(count / sum(count)),
+      label = scales::percent(after_stat(count / sum(count)), accuracy = 0.1)
+    ),
+    vjust = -0.3) +
+  scale_fill_brewer(palette = "Blues")+
+  scale_y_continuous(labels = scales::percent) +
+  theme(
+    axis.title = element_text(face = "bold"),
+    axis.text = element_text(color = "black"),
+    legend.title = element_text(face = "bold"),
+    legend.position = "right") +
+  labs(
+    x = "Age Group",
+    y = "Hospitalizations (%)",
+    fill = "Age Group")
+
+#Trend Plot
+ggplot(SIH_0_14_pesticida,
+       aes(x = ANO_CMPT, fill = age_group)) +
+  geom_bar(position = "fill") +
+  scale_fill_brewer(palette = "Blues")+
+  scale_y_continuous(labels = scales::percent) +
+  theme(
+    axis.title = element_text(face = "bold"),
+    axis.text = element_text(color = "black"),
+    legend.title = element_text(face = "bold"),
+    legend.position = "right") +
+  labs(
+    x = "Year",
+    y = "Hospitalizations (%)",
+    fill = "Age Group")
+```
+
+### Race
+
+```{r}
+#Aggregate Plot
+ggplot(SIH_0_14_pesticida, aes(x = RACA_COR, fill = RACA_COR)) +
+  geom_bar(aes(y = after_stat(count / sum(count)))) +
+  geom_text(
+    stat = "count",
+    aes(
+      y = after_stat(count / sum(count)),
+      label = scales::percent(after_stat(count / sum(count)), accuracy = 0.1)),
+    hjust = -0.2) +
+  coord_flip() +
+scale_fill_manual(values = palette.colors(10, palette = "Tableau 10")) +
+  scale_y_continuous(
+    labels = scales::percent,
+    expand = expansion(mult = c(0, 0.1))) +
+  theme(
+    axis.title = element_text(face = "bold"),
+    axis.text = element_text(color = "black"),
+    legend.title = element_text(face = "bold"),
+    legend.position = "right") +  
+  labs(
+    x = "Race",
+    y = "Percentage of Hospitalizations",
+    fill = "Race") +
+  theme(
+    legend.position = "none")
+```
+
+### Sex
+
+```{r}
+#Table
+sex_table <- SIH_0_14_pesticida %>%
+  count(SEXO, name = "Frequency") %>%
+  mutate(
+    Percent = Frequency / sum(Frequency)) %>%
+  arrange(desc(Frequency))
+
+sex_table %>%
+  gt() %>%
+  fmt_percent(
+    columns = Percent,
+    decimals = 1) %>%
+  cols_label(
+    SEXO = "Sex",
+    Frequency = "n",
+    Percent = "%") %>%
+  tab_header(
+    title = md("**Distribution of Hospitalizations by Sex**")) %>%
+  fmt_number(
+    columns = Frequency,
+    decimals = 0,
+    use_seps = TRUE)
+
+#Aggregate Plot
+ggplot(SIH_0_14_pesticida, aes(x = SEXO, fill = SEXO)) +
+  geom_bar(aes(y = after_stat(count / sum(count)))) +
+  geom_text(
+    stat = "count",
+    aes(
+      y = after_stat(count / sum(count)),
+      label = scales::percent(after_stat(count / sum(count)), accuracy = 0.1)
+    ),
+    vjust = -0.3) +
+scale_fill_manual(values = palette.colors(10, palette = "Tableau 10")) +
+  scale_y_continuous(labels = scales::percent) +
+  theme(
+    axis.title = element_text(face = "bold"),
+    axis.text = element_text(color = "black"),
+    legend.title = element_text(face = "bold"),
+    legend.position = "right") +
+  labs(
+    x = "Sex",
+    y = "Hospitalizations (%)",
+    fill = "Sex")
+
+#Trend Plot
+#Trend Plot
+ggplot(SIH_0_14_pesticida,
+       aes(x = ANO_CMPT, fill = SEXO)) +
+  geom_bar(position = "fill") +
+  scale_fill_brewer(palette = "Dark2")+
+  scale_y_continuous(labels = scales::percent) +
+  theme(
+    axis.title = element_text(face = "bold"),
+    axis.text = element_text(color = "black"),
+    legend.title = element_text(face = "bold"),
+    legend.position = "right") +
+  labs(
+    x = "Year",
+    y = "Hospitalizations (%)",
+    fill = "Sex")
+```
+
+## Days of Stay
+
+```{r}
+
+SIH_0_14_pesticida <- SIH_0_14_pesticida %>%
+  mutate(DIAS_PERM = as.numeric(DIAS_PERM))
+
+```
+
+#### By Race
+
+```{r}
+dias_race <- SIH_0_14_pesticida %>%
+  group_by(RACA_COR) %>%
+  summarise(
+    n = n(),
+    `Median (Range)` = paste0(
+      median(DIAS_PERM, na.rm = TRUE),
+      " (",
+      min(DIAS_PERM, na.rm = TRUE),
+      "–",
+      max(DIAS_PERM, na.rm = TRUE),
+      ")"
+    ),
+    .groups = "drop"
+  )
+
+dias_race
+```
+
+#### By Sex
+
+```{r}
+dias_sex <- SIH_0_14_pesticida %>%
+  group_by(SEXO) %>%
+  summarise(
+    n = n(),
+    `Median (Range)` = paste0(
+      median(DIAS_PERM, na.rm = TRUE),
+      " (",
+      min(DIAS_PERM, na.rm = TRUE),
+      "–",
+      max(DIAS_PERM, na.rm = TRUE),
+      ")"
+    ),
+    .groups = "drop"
+  )
+
+dias_sex
+```
+
+#### By Age Group
+
+```{r}
+dias_age <- SIH_0_14_pesticida %>%
+  group_by(age_group) %>%
+  summarise(
+    n = n(),
+    `Median (Range)` = paste0(
+      median(DIAS_PERM, na.rm = TRUE),
+      " (",
+      min(DIAS_PERM, na.rm = TRUE),
+      "–",
+      max(DIAS_PERM, na.rm = TRUE),
+      ")"
+    ),
+    .groups = "drop"
+  )
+
+dias_age
+```
+
+## Table 1
+
+```{r}
+
+table1SIH <- SIH_0_14_pesticida %>%
+  select(
+    SEXO,
+    RACA_COR,
+    age_group,
+    DIAG_PRINC
+  ) %>%
+  tbl_summary(
+    label = list(
+      SEXO ~ "Sex",
+      RACA_COR ~ "Race",
+      age_group ~ "Age group",
+      DIAG_PRINC ~ "Primary diagnosis (ICD-10)"
+    ),
+    statistic = list(
+      all_continuous() ~ "{median} ({p25}, {p75})",
+      all_categorical() ~ "{n} ({p}%)"
+    ),
+    digits = all_continuous() ~ 1,
+    percent = "column",
+    missing = "ifany",
+    missing_text = "Missing"
+  ) %>%
+  bold_labels()
+
+table1SIH
+
+
+```
+
+### Rates by Sex and Age
+
+```{r}
+sih_hosp_rates_by_sex_agegroup_2014_2024 <- read_csv("~/GitHub/intox_agro/resultados/sih_hosp_rates_by_sex_agegroup_2014_2024.csv")
+
+sociodemographic_rates <- sih_hosp_rates_by_sex_agegroup_2014_2024 |>
+  filter(age_group %in% c("0-4", "5-9", "10-14"))
+
+```
+
+#### Sex
+
+```{r}
+#Create aggregate rates
+
+sex_rates <- sociodemographic_rates %>%
+  group_by(sex) %>%
+  summarise(
+    Hospitalizations = sum(n_hosp_pesticide, na.rm = TRUE),
+    Population = sum(population, na.rm = TRUE),
+    `Hospitalization rate per 100,000` = round(
+      Hospitalizations / Population * 100000, 1
+    ),
+    `Rate range` = paste0(
+      round(min(rate_pesticide_per100k, na.rm = TRUE), 1),
+      "–",
+      round(max(rate_pesticide_per100k, na.rm = TRUE), 1)
+    ),
+    .groups = "drop"
+  )
+
+sex_rates
+
+
+```
+
+#### Age
+
+```{r}
+
+age_rates <- sociodemographic_rates %>%
+  group_by(age_group) %>%
+  summarise(
+    Hospitalizations = sum(n_hosp_pesticide, na.rm = TRUE),
+    Population = sum(population, na.rm = TRUE),
+    `Hospitalization rate per 100,000` = round(
+      Hospitalizations / Population * 100000, 1
+    ),
+    `Rate range` = paste0(
+      round(min(rate_pesticide_per100k, na.rm = TRUE), 1),
+      "–",
+      round(max(rate_pesticide_per100k, na.rm = TRUE), 1)
+    ),
+    .groups = "drop"
+  )
+
+age_rates
+```
