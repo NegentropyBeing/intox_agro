@@ -7,7 +7,7 @@ from this project.
 
 **Working directory:** `Dados/` (R project root)
 **Primary processing script:** `Scripts/07_build_outputs.R`
-**Last updated:** 2026-05-28
+**Last updated:** 2026-07-17
 
 ---
 
